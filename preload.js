@@ -73,6 +73,14 @@ contextBridge.exposeInMainWorld("electron", {
   },
   debugHiAnime: (args) => ipcRenderer.invoke("debug-hianime", args),
 
+  // JustAnime episode resolver
+  resolveJustAnime: (args) => ipcRenderer.invoke("resolve-justanime", args),
+  onJustAnimeProgress: (cb) => {
+    const h = (_, data) => cb(data?.stage);
+    ipcRenderer.on("justanime-progress", h);
+    return () => ipcRenderer.removeListener("justanime-progress", h);
+  },
+
   // App version (from package.json via Electron)
   getAppVersion: () => ipcRenderer.invoke("get-app-version"),
 

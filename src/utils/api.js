@@ -342,6 +342,17 @@ export const PLAYER_SOURCES = [
     movieUrl: (id) => `https://on.kinohub.vip/movie/${id}`,
   },
   {
+    id: "justanime",
+    label: "JustAnime",
+    tag: "ANIME",
+    note: "1080p, Sub/Dub ✓",
+    supportsProgress: true,
+    async: true,
+    params: {},
+    movieUrl: (_id) => "https://justanime.to",
+    tvUrl: (_id, _season, _ep) => "https://justanime.to",
+  },
+  {
     id: "hianime",
     label: "HiAnime",
     tag: "ANIME",
@@ -781,7 +792,7 @@ export const isAnimeContent = (item, details) => {
 };
 
 // Default sources
-export const ANIME_DEFAULT_SOURCE = "hianime";
+export const ANIME_DEFAULT_SOURCE = "justanime";
 export const NON_ANIME_DEFAULT_SOURCE = "vidrift";
 
 // ── Episode Group fetch (localStorage + in-memory cache, 7-day TTL) ─────────

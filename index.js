@@ -44,6 +44,7 @@ const storageIpc = require("./src/ipc/storage");
 const downloadsIpc = require("./src/ipc/downloads");
 const subtitlesIpc = require("./src/ipc/subtitles");
 const hianimeIpc = require("./src/ipc/hianime");
+const justanimeIpc = require("./src/ipc/justanime");
 const playerIpc = require("./src/ipc/player");
 const discordRpc = require("./src/ipc/discordRpc");
 
@@ -587,6 +588,7 @@ subtitlesIpc.register({
   saveDownloads: downloadsIpc.saveDownloads,
 });
 hianimeIpc.register();
+justanimeIpc.register();
 playerIpc.register(getMainWindow, {
   writeSecretMigration: storageIpc.writeSecretMigration,
 });

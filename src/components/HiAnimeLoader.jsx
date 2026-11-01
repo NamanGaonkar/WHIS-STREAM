@@ -1,40 +1,54 @@
 import { useEffect, useState } from "react";
 
-// Loading overlay content shown while the main process scrapes HiAnime.
-// Subscribes to "hianime-progress" events and renders the lookup steps.
+// Loading overlay content shown while the main process resolves anime sources.
+// Subscribes to progress events and renders the lookup steps.
 
 const STEPS = [
   { id: "search", label: "Searching title" },
+  { id: "servers", label: "Connecting to servers" },
   { id: "episodes", label: "Loading episode list" },
   { id: "stream", label: "Fetching stream" },
   { id: "player", label: "Starting player" },
 ];
 
-export default function HiAnimeLoader({ what = "episode", playerStarting }) {
+export default function HiAnimeLoader({
+  what = "episode",
+  playerStarting,
+  provider = "JustAnime",
+}) {
   const [stage, setStage] = useState("search");
 
   useEffect(() => {
     setStage("search");
-    const off = window.electron?.onHiAnimeProgress?.((s) => {
-      if (s) setStage(s);
-    });
+    const off =
+      provider === "JustAnime"
+        ? window.electron?.onJustAnimeProgress?.((s) => {
+            if (s) setStage(s);
+          })
+        : window.electron?.onHiAnimeProgress?.((s) => {
+            if (s) setStage(s);
+          });
     return () => {
       if (typeof off === "function") off();
     };
-  }, []);
+  }, [provider]);
+
+  const filteredSteps = STEPS.filter((step) =>
+    provider === "JustAnime" ? step.id !== "episodes" : step.id !== "servers",
+  );
 
   const current = playerStarting
-    ? STEPS.length - 1
+    ? filteredSteps.length - 1
     : Math.max(
         0,
-        STEPS.findIndex((s) => s.id === stage),
+        filteredSteps.findIndex((s) => s.id === stage),
       );
 
   return (
     <>
       <div className="spinner" />
       <span style={{ fontSize: 14, color: "var(--text2)" }}>
-        Looking up {what} on HiAnime…
+        Looking up {what} on {provider}…
       </span>
       <div
         style={{
@@ -46,7 +60,7 @@ export default function HiAnimeLoader({ what = "episode", playerStarting }) {
         role="status"
         aria-live="polite"
       >
-        {STEPS.map((step, i) => (
+        {filteredSteps.map((step, i) => (
           <div
             key={step.id}
             style={{

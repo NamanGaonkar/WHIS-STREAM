@@ -401,14 +401,27 @@ export default function MoviePage({
     setResolveError(null);
     const startTime = storage.get("dlTime_" + progressKey) || 0;
     let mounted = true;
-    window.electron
-      .resolveHiAnime({
-        title,
-        seasonNumber: 1,
-        episodeNumber: 1,
-        isMovie: true,
-        translationType: dubMode,
-      })
+    const isJustAnime = playerSource === "justanime";
+    const targetAnilistId = anilistData?.id ?? null;
+
+    const resolvePromise = isJustAnime
+      ? window.electron.resolveJustAnime({
+          title,
+          anilistId: targetAnilistId,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          isMovie: true,
+          translationType: dubMode,
+        })
+      : window.electron.resolveHiAnime({
+          title,
+          seasonNumber: 1,
+          episodeNumber: 1,
+          isMovie: true,
+          translationType: dubMode,
+        });
+
+    resolvePromise
       .then((res) => {
         if (!mounted) return;
         if (res?.ok && res.url) {
@@ -417,8 +430,9 @@ export default function MoviePage({
             window.electron
               .setPlayerVideo({
                 url: res.url,
-                referer: res.referer || "https://hianime.at/",
+                referer: res.referer || (isJustAnime ? "https://justanime.to/" : "https://hianime.at/"),
                 subtitle: res.subtitle || null,
+                subtitles: res.subtitles || null,
                 startTime,
               })
               .then((r) => {
@@ -435,9 +449,7 @@ export default function MoviePage({
             setResolvedPlayerUrl(res.url);
           }
         } else {
-          // HiAnime doesn't have this title → switch to the next source
-          // automatically and remember the choice for next time.
-          const next = getNextNonAsyncSource(playerSource);
+          const next = isJustAnime ? "hianime" : getNextNonAsyncSource(playerSource);
           if (next) {
             setFailoverSource(epKey, next);
             setM3u8Url(null);
@@ -447,7 +459,7 @@ export default function MoviePage({
             setResolveError(null);
             setPlayerSource(next);
           } else {
-            setResolveError(res?.error || "Movie not found on HiAnime");
+            setResolveError(res?.error || `Movie not found on ${isJustAnime ? "JustAnime" : "HiAnime"}`);
           }
         }
       })
@@ -1002,6 +1014,7 @@ export default function MoviePage({
                   <HiAnimeLoader
                     what="movie"
                     playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
+                    provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
                   />
                 ) : (
                   <>
@@ -1031,7 +1044,7 @@ export default function MoviePage({
               >
                 <span style={{ fontSize: 28 }}>⚠️</span>
                 <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                  Movie not found on HiAnime
+                  Movie not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
                 </span>
                 <span style={{ fontSize: 12, color: "var(--text3)" }}>
                   {resolveError}

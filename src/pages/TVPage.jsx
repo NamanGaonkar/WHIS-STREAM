@@ -800,13 +800,28 @@ export default function TVPage({
     const progressKey = `tv_${item.id}_s${selectedSeason}e${epNum}`;
     const startTime = storage.get("dlTime_" + progressKey) || 0;
     let mounted = true;
-    window.electron
-      .resolveHiAnime({
-        title,
-        seasonNumber: selectedSeason,
-        episodeNumber: epNum,
-        translationType: dubMode,
-      })
+    const isJustAnime = playerSource === "justanime";
+    const seasonEntry = anilistSeasons?.find(
+      (s) => s.seasonNum === selectedSeason,
+    );
+    const targetAnilistId = seasonEntry?.id ?? anilistData?.id ?? null;
+
+    const resolvePromise = isJustAnime
+      ? window.electron.resolveJustAnime({
+          title,
+          anilistId: targetAnilistId,
+          seasonNumber: selectedSeason,
+          episodeNumber: epNum,
+          translationType: dubMode,
+        })
+      : window.electron.resolveHiAnime({
+          title,
+          seasonNumber: selectedSeason,
+          episodeNumber: epNum,
+          translationType: dubMode,
+        });
+
+    resolvePromise
       .then((res) => {
         if (!mounted) return;
         if (res?.ok && res.url) {
@@ -815,8 +830,9 @@ export default function TVPage({
             window.electron
               .setPlayerVideo({
                 url: res.url,
-                referer: res.referer || "https://hianime.at/",
+                referer: res.referer || (isJustAnime ? "https://justanime.to/" : "https://hianime.at/"),
                 subtitle: res.subtitle || null,
+                subtitles: res.subtitles || null,
                 startTime,
               })
               .then((r) => {
@@ -834,9 +850,7 @@ export default function TVPage({
             setResolvedPlayerUrl(res.url);
           }
         } else {
-          // HiAnime doesn't have this episode → switch to the next source
-          // automatically and remember the choice for next time.
-          const next = getNextNonAsyncSource(playerSource);
+          const next = isJustAnime ? "hianime" : getNextNonAsyncSource(playerSource);
           if (next) {
             setFailoverSource(epKey, next);
             setM3u8Url(null);
@@ -846,7 +860,7 @@ export default function TVPage({
             setResolveError(null);
             setPlayerSource(next);
           } else {
-            setResolveError(res?.error || "Episode not found on HiAnime");
+            setResolveError(res?.error || `Episode not found on ${isJustAnime ? "JustAnime" : "HiAnime"}`);
           }
         }
       })
@@ -1929,6 +1943,7 @@ export default function TVPage({
                       <HiAnimeLoader
                         what="episode"
                         playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
+                        provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
                       />
                     ) : (
                       <>
@@ -1958,7 +1973,7 @@ export default function TVPage({
                   >
                     <span style={{ fontSize: 28 }}>⚠️</span>
                     <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                      Episode not found on HiAnime
+                      Episode not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
                     </span>
                     <span style={{ fontSize: 12, color: "var(--text3)" }}>
                       {resolveError}

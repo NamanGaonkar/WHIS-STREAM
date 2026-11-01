@@ -632,6 +632,7 @@ let _serverToken = crypto.randomBytes(24).toString("hex");
 let _currentVideoUrl = null;
 let _currentVideoReferer = BASE_URL + "/";
 let _currentVideoSubtitle = null;
+let _currentVideoSubtitles = null;
 let _currentVideoStartTime = 0;
 
 function proxied(u) {
@@ -672,9 +673,22 @@ function rewritePlaylist(text, playlistUrl) {
 }
 
 function buildPlayerHtml(videoUrl, startTime, subtitleUrl, nonce) {
-  const track = subtitleUrl
-    ? `<track kind="subtitles" src="${escapeHtmlAttr(proxied(subtitleUrl))}" srclang="en" label="Subtitles" default>`
-    : "";
+  let track = "";
+  if (Array.isArray(_currentVideoSubtitles) && _currentVideoSubtitles.length > 0) {
+    track = _currentVideoSubtitles
+      .map((s, idx) => {
+        const file = s.file || s.url;
+        if (!file) return "";
+        const isDef = s.default || idx === 0 ? " default" : "";
+        const label = escapeHtmlAttr(s.label || ('Subtitle ' + (idx + 1)));
+        const lang = escapeHtmlAttr(s.lang || "en");
+        return `<track kind="subtitles" src="${escapeHtmlAttr(proxied(file))}" srclang="${lang}" label="${label}"${isDef}>`;
+      })
+      .filter(Boolean)
+      .join("\n");
+  } else if (subtitleUrl) {
+    track = `<track kind="subtitles" src="${escapeHtmlAttr(proxied(subtitleUrl))}" srclang="en" label="Subtitles" default>`;
+  }
   const start = Number.isFinite(Number(startTime)) ? Number(startTime) : 0;
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -713,12 +727,14 @@ async function proxyRequest(target, req, res, hops = 0) {
     return;
   }
   const lib = targetUrl.protocol === "https:" ? https : http;
+  const isJustAnime = targetUrl.hostname.includes("justanime.to");
   const headers = {
     "User-Agent": USER_AGENT,
-    Referer: _currentVideoReferer,
+    Referer: isJustAnime ? "https://justanime.to/" : (_currentVideoReferer || BASE_URL + "/"),
     Accept: "*/*",
     "Accept-Encoding": "identity",
   };
+  if (isJustAnime) headers.Origin = "https://justanime.to";
   if (req.headers["range"]) headers["Range"] = req.headers["range"];
 
   const proxyReq = lib.request(
@@ -1004,6 +1020,7 @@ function register() {
     _currentVideoUrl = url;
     _currentVideoReferer = referer;
     _currentVideoSubtitle = subtitle;
+    _currentVideoSubtitles = Array.isArray(args.subtitles) ? args.subtitles : null;
     _currentVideoStartTime = asPosInt(args.startTime, 0);
     const server = await getPlayerServer();
     return {
