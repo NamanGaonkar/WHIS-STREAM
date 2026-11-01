@@ -35,27 +35,45 @@ function writeSecureStore(data) {
 function secureStoreGet(key) {
   const store = readSecureStore();
   const raw = store[key];
-  if (!raw) return null;
-  try {
-    if (safeStorage.isEncryptionAvailable()) {
-      return safeStorage.decryptString(Buffer.from(raw, "base64"));
+  if (raw) {
+    try {
+      if (safeStorage.isEncryptionAvailable()) {
+        const decrypted = safeStorage.decryptString(Buffer.from(raw, "base64"));
+        if (decrypted) return decrypted;
+      } else {
+        return Buffer.from(raw, "base64").toString("utf8");
+      }
+    } catch {
+      // safeStorage decrypt failed (e.g. app updated / path changed)
     }
-    return Buffer.from(raw, "base64").toString("utf8");
-  } catch {
-    return null;
   }
+  const fb = store[`_${key}_fb`];
+  if (fb) {
+    try {
+      return Buffer.from(fb, "base64").toString("utf8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 function secureStoreSet(key, value) {
   const store = readSecureStore();
   if (value === null || value === undefined || value === "") {
     delete store[key];
+    delete store[`_${key}_fb`];
   } else {
     if (safeStorage.isEncryptionAvailable()) {
-      store[key] = safeStorage.encryptString(value).toString("base64");
+      try {
+        store[key] = safeStorage.encryptString(value).toString("base64");
+      } catch {
+        store[key] = Buffer.from(value, "utf8").toString("base64");
+      }
     } else {
       store[key] = Buffer.from(value, "utf8").toString("base64");
     }
+    store[`_${key}_fb`] = Buffer.from(value, "utf8").toString("base64");
   }
   writeSecureStore(store);
 }

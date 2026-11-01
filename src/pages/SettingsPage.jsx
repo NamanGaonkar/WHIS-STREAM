@@ -1822,7 +1822,7 @@ function StartPageSection() {
           lineHeight: 1.6,
         }}
       >
-        Choose which page opens when you launch Streambert.
+        Choose which page opens when you launch WHIS STREAM.
       </div>
       <div
         style={{
@@ -2456,7 +2456,7 @@ function DiscordRpcSection() {
         />
         <ToggleRow
           label="Show cover art"
-          description="Uses the movie/show poster as the large image. When off, only the Streambert icon is shown."
+          description="Uses the movie/show poster as the large image. When off, only the WHIS STREAM icon is shown."
           value={showCover}
           onChange={setShowCover}
           disabled={!enabled}
@@ -2470,7 +2470,7 @@ function DiscordRpcSection() {
         />
         <ToggleRow
           label="Show GitHub button"
-          description="Adds a button linking to the Streambert GitHub repository."
+          description="Adds a button linking to the WHIS STREAM GitHub repository."
           value={showButton}
           onChange={setShowButton}
           disabled={!enabled}
@@ -3591,7 +3591,7 @@ export default function SettingsPage({
       {showDeleteDlConfirm && (
         <ConfirmDialog
           title="DELETE ALL DOWNLOADS?"
-          description="This will permanently delete all video files downloaded through Streambert and remove them from the download list."
+          description="This will permanently delete all video files downloaded through WHIS STREAM and remove them from the download list."
           confirmLabel="Yes, Delete All"
           onConfirm={async () => {
             setShowDeleteDlConfirm(false);
@@ -3633,7 +3633,7 @@ export default function SettingsPage({
           SETTINGS
         </div>
         <div style={{ color: "var(--text3)", fontSize: 14, marginBottom: 48 }}>
-          App configuration for Streambert
+          App configuration for WHIS STREAM
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════ */}
@@ -4240,7 +4240,7 @@ export default function SettingsPage({
               }}
             >
               Downloaded videos will be saved here. Make sure the folder exists
-              and Streambert has write access to it.
+              and WHIS STREAM has write access to it.
             </div>
             <div
               style={{
@@ -4360,7 +4360,7 @@ export default function SettingsPage({
             <div style={{ padding: "22px 24px" }}>
               <CleanRow
                 title="Install Location"
-                description="Opens the folder where Streambert is installed."
+                description="Opens the folder where WHIS STREAM is installed."
                 buttonLabel="Open Folder"
                 onAction={async () => {
                   const p = await window.electron?.getInstallPath?.();
@@ -4406,7 +4406,7 @@ export default function SettingsPage({
             <div style={{ padding: "22px 24px" }}>
               <CleanRow
                 title="Delete All Downloads"
-                description="Permanently deletes all video files that were downloaded through Streambert and removes them from the download list. Only files downloaded through the app will be deleted, nothing else in your folder is touched."
+                description="Permanently deletes all video files that were downloaded through WHIS STREAM and removes them from the download list. Only files downloaded through the app will be deleted, nothing else in your folder is touched."
                 buttonLabel="Delete All"
                 onAction={() =>
                   new Promise((resolve) => {
@@ -4472,7 +4472,7 @@ export default function SettingsPage({
                       lineHeight: 1.6,
                     }}
                   >
-                    Completely resets Streambert to factory defaults, clears all
+                    Completely resets WHIS STREAM to factory defaults, clears all
                     settings, API Token, saved library, watch history/progress,
                     and all cached data. Your downloaded video files will not be
                     touched.

@@ -171,14 +171,40 @@ const _isElectronSecure =
 export const secureStorage = {
   /** Read an encrypted value. Returns null if not set. */
   async get(key) {
-    if (!_isElectronSecure) return null;
-    return window.electron.secureGet(key);
+    let val = null;
+    if (_isElectronSecure) {
+      try {
+        val = await window.electron.secureGet(key);
+      } catch {}
+    }
+    if (!val) {
+      val = storage.get(key);
+      if (val && _isElectronSecure) {
+        try {
+          window.electron.secureSet(key, val);
+        } catch {}
+      }
+    }
+    return val || null;
   },
 
   /** Write an encrypted value. Pass null/empty to delete. */
   async set(key, value) {
-    if (!_isElectronSecure) return;
-    return window.electron.secureSet(key, value ?? "");
+    if (value === null || value === undefined || value === "") {
+      storage.remove(key);
+      if (_isElectronSecure) {
+        try {
+          await window.electron.secureSet(key, "");
+        } catch {}
+      }
+      return;
+    }
+    storage.set(key, value);
+    if (_isElectronSecure) {
+      try {
+        await window.electron.secureSet(key, value);
+      } catch {}
+    }
   },
 };
 

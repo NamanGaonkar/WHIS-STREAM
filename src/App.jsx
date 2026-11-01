@@ -339,11 +339,19 @@ export default function App() {
   // ── Load API key from secure storage on startup ──
   useEffect(() => {
     let mounted = true;
-    secureStorage.get("apikey").then((val) => {
+    async function loadKey() {
+      let key = null;
+      try {
+        key = await secureStorage.get("apikey");
+      } catch {}
+      if (!key) {
+        key = storage.get(STORAGE_KEYS.API_KEY);
+      }
       if (!mounted) return;
-      setApiKey(val || null);
+      setApiKey(key || null);
       setApiKeyLoaded(true);
-    });
+    }
+    loadKey();
     return () => {
       mounted = false;
     };
@@ -780,11 +788,13 @@ export default function App() {
 
   const saveApiKey = useCallback((key) => {
     secureStorage.set("apikey", key);
+    storage.set(STORAGE_KEYS.API_KEY, key);
     setApiKey(key);
   }, []);
 
   const changeApiKey = useCallback(() => {
     secureStorage.set("apikey", "");
+    storage.remove(STORAGE_KEYS.API_KEY);
     setApiKey(null);
     setApiKeyLoaded(true);
     setSkipped(false);
