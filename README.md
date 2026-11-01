@@ -9,6 +9,10 @@
   Featuring a Netflix-style cinematic browsing layout, frosted glass UI accents, dynamic purple themes, integrated ad and tracker blocking, and offline playback.
 </p>
 
+<p align="center">
+  <img src="demo.png" alt="WHIS STREAM Interface" width="100%" style="border-radius: 12px; border: 1px solid rgba(168, 85, 247, 0.2); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);" />
+</p>
+
 ---
 
 ## Overview
