@@ -150,6 +150,25 @@ export default function MoviePage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srcId.id]);
   const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  const [playerControlsVisible, setPlayerControlsVisible] = useState(true);
+  const hideControlsTimerRef = useRef(null);
+
+  const handlePlayerMouseMove = useCallback(() => {
+    setPlayerControlsVisible(true);
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => {
+      setPlayerControlsVisible(false);
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    if (!playing) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setPlaying(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [playing]);
   // pipOpen=true: main webview shows about:blank, pop-out window has the real player
   const [pipOpen, setPipOpen] = useState(false);
   const pipUrlRef = useRef(null); // URL to restore when pop-out closes
@@ -815,368 +834,50 @@ export default function MoviePage({
   );
 
   return (
-    <div className="fade-in">
-      <div className="detail-hero">
-        <div
-          className="detail-bg"
-          style={{
-            backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
-          }}
-        />
-        <div className="detail-gradient" />
-        <div className="detail-content">
-          <div className="detail-poster" style={{ position: "relative" }}>
-            {d.poster_path ? (
-              <img src={imgUrl(d.poster_path)} alt={title} loading="lazy" />
-            ) : (
-              <div
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--text3)",
-                }}
-              >
-                <FilmIcon />
-              </div>
-            )}
-            {isWatched && (
-              <div className="detail-watched-badge">
-                <WatchedIcon size={36} />
-              </div>
-            )}
-          </div>
-          <div className="detail-info">
-            <div className="detail-type">Movie</div>
-            <div className="detail-title">{title}</div>
-            <div className="genres">
-              {displayGenres.map((g) => (
-                <span key={g.id} className="genre-tag">
-                  {g.name}
-                </span>
-              ))}
-            </div>
-            <div className="detail-meta">
-              {displayScore && (
-                <span className="detail-rating">
-                  <StarIcon /> {displayScore}
-                </span>
-              )}
-              {year && <span>{year}</span>}
-              {d.runtime && <span>{d.runtime} min</span>}
-              {d.original_language && (
-                <span>{d.original_language?.toUpperCase()}</span>
-              )}
-            </div>
-            {rating.cert && (
-              <div
-                className={`age-rating-pill${restricted ? " age-rating-pill--restricted" : ""}`}
-              >
-                {restricted ? (
-                  <RatingLockIcon size={13} />
-                ) : (
-                  <RatingShieldIcon size={13} />
-                )}
-                <span className="age-rating-pill-cert">{rating.cert}</span>
-                {restricted && (
-                  <span className="age-rating-pill-label">
-                    Inappropriate for your age setting
-                  </span>
-                )}
-              </div>
-            )}
-            <p className="detail-overview">{displayOverview}</p>
-            {!isWatched && displayPct > 0 && (
-              <div className="progress-bar-row" style={{ marginBottom: 12 }}>
-                <div className="progress-bar-outer">
-                  <div
-                    className="progress-bar-fill"
-                    style={{ width: `${Math.min(displayPct, 100)}%` }}
-                  />
-                </div>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                  {progressLabel}
-                </span>
-              </div>
-            )}
-            <div className="detail-actions">
-              {isUnreleased ? (
-                <button
-                  className="btn btn-primary btn-restricted"
-                  disabled
-                  title="This movie has not been released yet"
-                >
-                  🔒 Unreleased
-                </button>
-              ) : restricted ? (
-                <button
-                  className="btn btn-primary btn-restricted"
-                  disabled
-                  title="Inappropriate for your age rating setting"
-                >
-                  🔒 Restricted
-                </button>
-              ) : (
-                <button className="btn btn-primary" onClick={handlePlay}>
-                  <PlayIcon /> {playing ? "Restart" : "Play"}
-                </button>
-              )}
-              {trailerKey &&
-                (restricted ? (
-                  <button
-                    className="btn btn-secondary btn-restricted"
-                    disabled
-                    title="Inappropriate for your age rating setting"
-                  >
-                    🔒 Trailer
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowTrailer(true)}
-                  >
-                    <TrailerIcon /> Trailer
-                  </button>
-                ))}
-              <button
-                className="btn btn-secondary"
-                onClick={() => setShowCast(true)}
-              >
-                <CastIcon /> Cast
-              </button>
-              <button className="btn btn-secondary" onClick={onSave}>
-                {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-                {isSaved ? "Saved" : "Save"}
-              </button>
-              {!isUnreleased &&
-                (isWatched ? (
-                  <button
-                    className="btn btn-ghost watched-btn"
-                    onClick={() => onMarkUnwatched?.(progressKey)}
-                  >
-                    <WatchedIcon size={16} /> Watched
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => onMarkWatched?.(progressKey)}
-                    >
-                      ✓ Mark Watched
-                    </button>
-                    {hasProgress && (
-                      <button
-                        className="btn btn-ghost"
-                        style={{ fontSize: 13 }}
-                        onClick={() => {
-                          saveProgress(progressKey, 0);
-                          storage.set("dlTime_" + progressKey, null);
-                        }}
-                      >
-                        ⊘ Not Started
-                      </button>
-                    )}
-                  </>
-                ))}
-              <button className="btn btn-ghost" onClick={onBack}>
-                <BackIcon /> Back
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
+    <div className="netflix-detail-view fade-in">
+      {/* ── Dedicated Netflix Fullscreen Player View ── */}
       {playing && !restricted && !isUnreleased && (
-        <div className="section">
-          <div
-            className={`player-wrap${playerFullscreen ? " player-wrap--fullscreen" : ""}`}
-            ref={playerWrapRef}
-          >
-            {/* Universal source-loading overlay, shown instantly on every source/item switch */}
-            {webviewLoading && !resolveError && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  zIndex: 10,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(0,0,0,0.92)",
-                  gap: 14,
-                  borderRadius: "inherit",
-                }}
-              >
-                {sourceIsAsync(playerSource) ? (
-                  <HiAnimeLoader
-                    what="movie"
-                    playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
-                    provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
-                  />
-                ) : (
-                  <>
-                    <div className="spinner" />
-                    <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                      {`Loading ${PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "source"}…`}
-                    </span>
-                  </>
-                )}
-              </div>
-            )}
-            {/* HiAnime: error if lookup failed */}
-            {sourceIsAsync(playerSource) && resolveError && !resolvingUrl && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  zIndex: 10,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(0,0,0,0.85)",
-                  gap: 10,
-                  borderRadius: "inherit",
-                }}
-              >
-                <span style={{ fontSize: 28 }}>⚠️</span>
-                <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                  Movie not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                  {resolveError}
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                  Try a different source, or switch sub/dub.
-                </span>
-              </div>
-            )}
-            {/* ID conversion failed (sources that need an IMDb / Kinopoisk ID) */}
-            {srcId.error && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  zIndex: 11,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(0,0,0,0.85)",
-                  gap: 10,
-                  borderRadius: "inherit",
-                }}
-              >
-                <span style={{ fontSize: 28 }}>⚠️</span>
-                <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                  Could not resolve the {srcId.idLabel} for this title
-                </span>
-                <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                  {srcId.error}. Try a different source.
-                </span>
-              </div>
-            )}
-            {/* Pop-out active: main stream is paused, pop-out has the real player */}
-            {pipOpen && (
-              <div
-                style={{
-                  position: "absolute",
-                  inset: 0,
-                  zIndex: 20,
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  background: "rgba(0,0,0,0.92)",
-                  gap: 16,
-                  borderRadius: "inherit",
-                }}
-              >
-                <PopOutIcon size={36} />
-                <span
-                  style={{
-                    fontSize: 15,
-                    color: "var(--text1)",
-                    fontWeight: 600,
-                  }}
-                >
-                  Playing in pop-out window
-                </span>
-                <span
-                  style={{
-                    fontSize: 12,
-                    color: "var(--text2)",
-                    textAlign: "center",
-                    maxWidth: 260,
-                  }}
-                >
-                  Closing the pop-out will reload the player here.
-                </span>
-                <button
-                  className="player-overlay-btn"
-                  onClick={() => window.electron?.closePipWindow?.()}
-                  style={{ marginTop: 4 }}
-                >
-                  Close pop-out &amp; return
-                </button>
-              </div>
-            )}
-            <webview
-              ref={webviewRef}
-              // A fresh guest per UA mode: loadURL's userAgent override sticks
-              // to the WebContents, so it can't be unset on a reused webview.
-              key={sourceUsesCleanUa(playerSource) ? "ua-clean" : "ua-default"}
-              useragent={
-                sourceUsesCleanUa(playerSource) ? CLEAN_USER_AGENT : undefined
-              }
-              src={
-                pipOpen
-                  ? "about:blank"
-                  : sourceIsAsync(playerSource)
-                    ? resolvedPlayerUrl || "about:blank"
-                    : playerDirectUrl || "about:blank"
-              }
-              partition="persist:player"
-              allowpopups="false"
-              sandbox="allow-scripts allow-same-origin allow-forms"
-              style={{
-                position: "absolute",
-                inset: 0,
-                width: "100%",
-                height: "100%",
-                border: "none",
-                visibility:
-                  webviewLoading ||
-                  (sourceIsAsync(playerSource) && !resolvedPlayerUrl)
-                    ? "hidden"
-                    : "visible",
-              }}
-            />
-            {/* Left-side overlay button group, flex row, no fixed px offsets */}
-            <div className="player-overlay-group">
+        <div
+          className="netflix-dedicated-player"
+          onMouseMove={handlePlayerMouseMove}
+          ref={playerWrapRef}
+        >
+          {/* Top Bar */}
+          <div className={`netflix-player-topbar ${playerControlsVisible ? "" : "hidden"}`}>
+            <button
+              className="netflix-player-back-btn"
+              onClick={() => setPlaying(false)}
+              title="Return to Details (Esc)"
+            >
+              <BackIcon />
+              <span>Back to Details</span>
+            </button>
+
+            <div className="netflix-player-title-info">
+              <span>{title}</span>
+              {year && <span style={{ color: "#8c8c8c", fontSize: 13 }}>({year})</span>}
+            </div>
+
+            <div className="netflix-player-controls-right">
+              {/* Source Selector */}
               <button
                 ref={sourceRef}
-                className="player-overlay-btn"
+                className="netflix-player-btn"
                 onClick={() => {
                   const rect = sourceRef.current?.getBoundingClientRect();
-                  if (rect)
-                    setMenuPos({ top: rect.bottom + 6, left: rect.left });
+                  if (rect) setMenuPos({ top: rect.bottom + 6, left: rect.left });
                   setShowSourceMenu((v) => !v);
                 }}
                 title="Change source"
               >
                 <SourceIcon />
-                {PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ??
-                  "Source"}
+                <span>{PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "Source"}</span>
               </button>
-              {/* Sub/Dub toggle: HiAnime, and anime-capable sources (Vidnest) on anime titles */}
-              {(sourceIsAsync(playerSource) ||
-                (isAnime && sourceSupportsAnime(playerSource))) && (
+
+              {/* Sub/Dub toggle for anime */}
+              {(sourceIsAsync(playerSource) || (isAnime && sourceSupportsAnime(playerSource))) && (
                 <button
-                  className="player-overlay-btn"
+                  className="netflix-player-btn"
                   onClick={() => {
                     const next = dubMode === "sub" ? "dub" : "sub";
                     setDubMode(next);
@@ -1194,9 +895,10 @@ export default function MoviePage({
                   {dubMode === "sub" ? "SUB" : "DUB"}
                 </button>
               )}
-              {/* Blocked ads & trackers button */}
+
+              {/* Blocked ads badge */}
               <button
-                className="player-overlay-btn"
+                className="netflix-player-btn"
                 onClick={() => {
                   setShowSourceMenu(false);
                   setShowBlockedModal(true);
@@ -1204,13 +906,31 @@ export default function MoviePage({
                 title="Blocked ads & trackers"
               >
                 <ShieldBlockIcon />
-                {blockedSession > 0 && (
-                  <span className="player-blocked-badge">{blockedSession}</span>
-                )}
+                {blockedSession > 0 && <span>{blockedSession}</span>}
               </button>
-              {/* Pop-out button*/}
+
+              {/* Download button */}
               <button
-                className="player-overlay-btn"
+                className="netflix-player-btn"
+                onClick={() =>
+                  movieDownload
+                    ? onGoToDownloads?.(movieDownload.id)
+                    : (setShowSourceMenu(false), setShowDownload(true))
+                }
+                title={
+                  movieDownload
+                    ? movieDownload.status === "downloading"
+                      ? "Downloading… - view in Downloads"
+                      : "Already downloaded - view in Downloads"
+                    : "Download"
+                }
+              >
+                <DownloadIcon />
+              </button>
+
+              {/* Pop-out button */}
+              <button
+                className="netflix-player-btn"
                 onClick={() => {
                   if (pipOpen) {
                     window.electron?.closePipWindow?.();
@@ -1238,124 +958,349 @@ export default function MoviePage({
                 <PopOutIcon />
               </button>
             </div>
-            {showSourceMenu && menuPos && (
-              <div
-                className="source-dropdown source-dropdown--fixed"
-                style={{ top: menuPos.top, left: menuPos.left }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                {PLAYER_SOURCES.map((src) => (
-                  <button
-                    key={src.id}
-                    className={
-                      "source-dropdown__item" +
-                      (playerSource === src.id
-                        ? " source-dropdown__item--active"
-                        : "")
-                    }
-                    onClick={() => {
-                      setShowSourceMenu(false);
-                      if (src.id === playerSource) return;
-                      // Manual selection wins over auto-failover
-                      clearFailoverSource(`movie_${item.id}_${dubMode}`);
-                      setPlayerSource(src.id);
-                      storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
-                      setM3u8Url(null);
-                      setInterceptedSubs([]);
-                      resolvedPlayerUrlRef.current = null;
-                      setResolvedPlayerUrl(null);
-                      resolvingUrlRef.current = false;
-                      setResolvingUrl(false);
-                      setResolveError(null);
-                    }}
-                  >
-                    <span>{src.label}</span>
-                    {src.tag && (
-                      <span className="source-dropdown__tag">{src.tag}</span>
-                    )}
-                    {src.note && (
-                      <span className="source-dropdown__note">{src.note}</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-            <button
-              className="player-overlay-btn"
-              onClick={() =>
-                movieDownload
-                  ? onGoToDownloads?.(movieDownload.id)
-                  : (setShowSourceMenu(false), setShowDownload(true))
-              }
-              title={
-                movieDownload
-                  ? movieDownload.status === "downloading"
-                    ? "Downloading… - view in Downloads"
-                    : "Already downloaded - view in Downloads"
-                  : "Download"
-              }
-            >
-              {movieDownload ? (
-                <span
-                  className="player-downloaded-icon"
-                  style={{
-                    color:
-                      movieDownload.status === "downloading"
-                        ? "var(--red)"
-                        : "#4caf50",
-                  }}
-                >
-                  {movieDownload.status === "downloading" ? "↓" : "✓"}
-                </span>
-              ) : (
-                <DownloadIcon />
-              )}
-              {!movieDownload && m3u8Url && (
-                <span className="player-overlay-dot" />
-              )}
-              {!sourceSupportsProgress(playerSource) && (
-                <span
-                  className="player-no-progress-hint"
-                  title="No automatic progress tracking for this source"
-                >
-                  ⚠ no tracking
-                </span>
-              )}
-            </button>
           </div>
 
-          {displayPct > 0 && (
-            <div className="progress-bar-row">
-              <div className="progress-bar-outer">
-                <div
-                  className="progress-bar-fill"
-                  style={{ width: `${Math.min(displayPct, 100)}%` }}
-                />
-              </div>
-              <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                {progressLabel}
-              </span>
+          {/* Source Dropdown Menu */}
+          {showSourceMenu && menuPos && (
+            <div
+              className="source-dropdown source-dropdown--fixed"
+              style={{ top: menuPos.top, left: menuPos.left, zIndex: 100000 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {PLAYER_SOURCES.map((src) => (
+                <button
+                  key={src.id}
+                  className={
+                    "source-dropdown__item" +
+                    (playerSource === src.id ? " source-dropdown__item--active" : "")
+                  }
+                  onClick={() => {
+                    setShowSourceMenu(false);
+                    if (src.id === playerSource) return;
+                    clearFailoverSource(`movie_${item.id}_${dubMode}`);
+                    setPlayerSource(src.id);
+                    storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
+                    setM3u8Url(null);
+                    setInterceptedSubs([]);
+                    resolvedPlayerUrlRef.current = null;
+                    setResolvedPlayerUrl(null);
+                    resolvingUrlRef.current = false;
+                    setResolvingUrl(false);
+                    setResolveError(null);
+                  }}
+                >
+                  <span>{src.label}</span>
+                  {src.tag && <span className="source-dropdown__tag">{src.tag}</span>}
+                  {src.note && <span className="source-dropdown__note">{src.note}</span>}
+                </button>
+              ))}
             </div>
           )}
-          <div className="progress-mark-row">
-            <span
-              style={{ fontSize: 12, color: "var(--text3)", marginRight: 4 }}
-            >
-              Mark progress:
-            </span>
-            {[25, 50, 75, 100].map((p) => (
-              <button
-                key={p}
-                className="btn btn-ghost"
-                style={{ padding: "5px 14px", fontSize: 12 }}
-                onClick={() => saveProgress(progressKey, p)}
+
+          {/* Viewport & Webview */}
+          <div className="netflix-player-viewport">
+            {/* Loading Overlay */}
+            {webviewLoading && !resolveError && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.92)",
+                  gap: 14,
+                }}
               >
-                {p}%
-              </button>
-            ))}
+                {sourceIsAsync(playerSource) ? (
+                  <HiAnimeLoader
+                    what="movie"
+                    playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
+                    provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
+                  />
+                ) : (
+                  <>
+                    <div className="spinner" />
+                    <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                      {`Loading ${PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "source"}…`}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* HiAnime / JustAnime Resolution Error */}
+            {sourceIsAsync(playerSource) && resolveError && !resolvingUrl && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.85)",
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>⚠️</span>
+                <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                  Movie not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{resolveError}</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>
+                  Try a different source, or switch sub/dub.
+                </span>
+              </div>
+            )}
+
+            {/* ID Conversion Error */}
+            {srcId.error && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 11,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.85)",
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>⚠️</span>
+                <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                  Could not resolve the {srcId.idLabel} for this title
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>
+                  {srcId.error}. Try a different source.
+                </span>
+              </div>
+            )}
+
+            {/* Pop-out Active Screen */}
+            {pipOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.92)",
+                  gap: 16,
+                }}
+              >
+                <PopOutIcon size={36} />
+                <span style={{ fontSize: 15, color: "var(--text1)", fontWeight: 600 }}>
+                  Playing in pop-out window
+                </span>
+                <button
+                  className="netflix-player-btn"
+                  onClick={() => window.electron?.closePipWindow?.()}
+                  style={{ marginTop: 4 }}
+                >
+                  Close pop-out &amp; return
+                </button>
+              </div>
+            )}
+
+            <webview
+              ref={webviewRef}
+              key={sourceUsesCleanUa(playerSource) ? "ua-clean" : "ua-default"}
+              useragent={sourceUsesCleanUa(playerSource) ? CLEAN_USER_AGENT : undefined}
+              src={
+                pipOpen
+                  ? "about:blank"
+                  : sourceIsAsync(playerSource)
+                    ? resolvedPlayerUrl || "about:blank"
+                    : playerDirectUrl || "about:blank"
+              }
+              partition="persist:player"
+              allowpopups="false"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                border: "none",
+                visibility:
+                  webviewLoading || (sourceIsAsync(playerSource) && !resolvedPlayerUrl)
+                    ? "hidden"
+                    : "visible",
+              }}
+            />
           </div>
         </div>
       )}
+
+      {/* ── Netflix Detail Hero ── */}
+      <div
+        className="netflix-hero"
+        style={{
+          backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
+        }}
+      >
+        <div className="netflix-hero-vignette" />
+        <div className="netflix-hero-content">
+          <div className="netflix-brand-badge">
+            <span className="netflix-n-logo">N</span>
+            <span className="netflix-type-label">FILM</span>
+          </div>
+
+          <h1 className="netflix-hero-title">{title}</h1>
+
+          <div className="netflix-meta-row">
+            <span className="netflix-match">
+              {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
+            </span>
+            {year && <span className="netflix-year">{year}</span>}
+            {rating.cert && (
+              <span className="netflix-badge-rating">{rating.cert}</span>
+            )}
+            {d.runtime && (
+              <span className="netflix-year">
+                {Math.floor(d.runtime / 60)}h {d.runtime % 60}m
+              </span>
+            )}
+            <span className="netflix-badge-tech">HD</span>
+            <span className="netflix-badge-tech">5.1</span>
+          </div>
+
+          <div className="netflix-hero-actions">
+            {isUnreleased ? (
+              <button
+                className="netflix-btn-play"
+                disabled
+                style={{ opacity: 0.6, cursor: "not-allowed" }}
+                title="This movie has not been released yet"
+              >
+                🔒 Unreleased
+              </button>
+            ) : restricted ? (
+              <button
+                className="netflix-btn-play"
+                disabled
+                style={{ opacity: 0.6, cursor: "not-allowed" }}
+                title="Inappropriate for your age rating setting"
+              >
+                🔒 Restricted
+              </button>
+            ) : (
+              <button className="netflix-btn-play" onClick={handlePlay}>
+                <PlayIcon />
+                <span>{hasProgress ? "Resume" : "Play"}</span>
+              </button>
+            )}
+
+            <button
+              className="netflix-btn-circle"
+              onClick={onSave}
+              title={isSaved ? "Saved to List" : "Add to List"}
+            >
+              {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
+            </button>
+
+            {trailerKey && !restricted && (
+              <button
+                className="netflix-btn-circle"
+                onClick={() => setShowTrailer(true)}
+                title="Watch Trailer"
+              >
+                <TrailerIcon />
+              </button>
+            )}
+
+            <button
+              className="netflix-btn-circle"
+              onClick={() => setShowCast(true)}
+              title="View Cast & Crew"
+            >
+              <CastIcon />
+            </button>
+
+            {!isUnreleased && (
+              <button
+                className="netflix-btn-circle"
+                onClick={
+                  isWatched
+                    ? () => onMarkUnwatched?.(progressKey)
+                    : () => onMarkWatched?.(progressKey)
+                }
+                title={isWatched ? "Mark Unwatched" : "Mark Watched"}
+                style={isWatched ? { color: "#46d369", borderColor: "#46d369" } : undefined}
+              >
+                <WatchedIcon size={18} />
+              </button>
+            )}
+
+            <button className="netflix-btn-back" onClick={onBack}>
+              <BackIcon /> Back
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Netflix 2-Column Overview & Meta ── */}
+      <div className="netflix-body-container">
+        <div className="netflix-info-grid">
+          <div>
+            <p className="netflix-synopsis">{displayOverview}</p>
+            {!isWatched && displayPct > 0 && (
+              <div className="progress-bar-row" style={{ maxWidth: 500 }}>
+                <div className="progress-bar-outer">
+                  <div
+                    className="progress-bar-fill"
+                    style={{ width: `${Math.min(displayPct, 100)}%` }}
+                  />
+                </div>
+                <span style={{ fontSize: 12, color: "#8c8c8c" }}>{progressLabel}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="netflix-sidebar">
+            {credits?.cast?.length > 0 && (
+              <div className="netflix-meta-block">
+                <span className="netflix-meta-label">Cast:</span>
+                <span className="netflix-meta-value">
+                  {credits.cast.slice(0, 4).map((c) => c.name).join(", ")}
+                </span>
+              </div>
+            )}
+
+            {displayGenres.length > 0 && (
+              <div className="netflix-meta-block">
+                <span className="netflix-meta-label">Genres:</span>
+                <span className="netflix-meta-value">
+                  {displayGenres.map((g) => g.name).join(", ")}
+                </span>
+              </div>
+            )}
+
+            {d.tagline && (
+              <div className="netflix-meta-block">
+                <span className="netflix-meta-label">This movie is:</span>
+                <span className="netflix-meta-value">{d.tagline}</span>
+              </div>
+            )}
+
+            {d.original_language && (
+              <div className="netflix-meta-block">
+                <span className="netflix-meta-label">Original Language:</span>
+                <span className="netflix-meta-value">{d.original_language.toUpperCase()}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       {collection && onSelect && (
         <div className="section">

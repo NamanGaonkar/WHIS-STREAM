@@ -7,7 +7,11 @@ const USER_AGENT =
 const BASE_WEB = "https://justanime.to";
 const API_BASE = "https://core.justanime.to/api";
 
-function fetchJson(urlStr, { timeout = 10000, referer = BASE_WEB + "/" } = {}) {
+// In-memory cache for AniList IDs and server streams
+const _idCache = new Map(); // key `${title}|${season}|${isMovie}` -> anilistId
+const _streamCache = new Map(); // key `${anilistId}|${ep}|${mode}` -> stream object
+
+function fetchJson(urlStr, { timeout = 6000, referer = BASE_WEB + "/" } = {}) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
     const req = https.request(
@@ -93,7 +97,7 @@ function fetchAniList(search, isMovie = false) {
       },
     );
     req.on("error", () => resolve(null));
-    req.setTimeout(8000, () => {
+    req.setTimeout(6000, () => {
       req.destroy();
       resolve(null);
     });
@@ -103,9 +107,15 @@ function fetchAniList(search, isMovie = false) {
 }
 
 async function resolveAnilistId(title, season = 1, isMovie = false) {
+  const cacheKey = `${title.toLowerCase()}|${season}|${isMovie}`;
+  if (_idCache.has(cacheKey)) return _idCache.get(cacheKey);
+
   const media = await fetchAniList(title, isMovie);
   if (!media) return null;
-  if (isMovie || season <= 1) return media.id;
+  if (isMovie || season <= 1) {
+    _idCache.set(cacheKey, media.id);
+    return media.id;
+  }
 
   // For multi-season anime: traverse relations to find sequel of target season
   let current = media;
@@ -119,9 +129,47 @@ async function resolveAnilistId(title, season = 1, isMovie = false) {
     );
     if (!sequelEdge?.node?.id) break;
     current = sequelEdge.node;
-    if (s === season) return current.id;
+    if (s === season) {
+      _idCache.set(cacheKey, current.id);
+      return current.id;
+    }
   }
+  _idCache.set(cacheKey, media.id);
   return media.id;
+}
+
+async function fetchServerStream(targetId, episodeNumber, server, mode) {
+  const streamRes = await fetchJson(
+    `${API_BASE}/watch/${targetId}/episode/${episodeNumber}/${server}`,
+    { timeout: 4500 }
+  );
+  const streamObj =
+    streamRes[mode] ||
+    (mode === "dub" ? streamRes.sub : streamRes.dub);
+
+  if (streamObj?.sources?.length > 0) {
+    const primarySource = streamObj.sources[0];
+    const subtitles = Array.isArray(streamObj.subtitles)
+      ? streamObj.subtitles
+      : [];
+    const referer =
+      streamObj.headers?.Referer || "https://flixcloud.cc/";
+
+    return {
+      ok: true,
+      url: primarySource.url,
+      quality: primarySource.quality || "auto",
+      isM3U8: primarySource.isM3U8 !== false,
+      referer,
+      subtitle: subtitles[0]?.file || null,
+      subtitles,
+      intro: streamObj.intro || null,
+      outro: streamObj.outro || null,
+      server,
+      isDirectMp4: false,
+    };
+  }
+  throw new Error(`No sources on server ${server}`);
 }
 
 const SERVER_PRIORITY = [
@@ -161,6 +209,7 @@ async function resolveJustAnime(event, args = {}) {
     try {
       const searchRes = await fetchJson(
         `${API_BASE}/search/suggestions?query=${encodeURIComponent(title)}`,
+        { timeout: 3500 }
       );
       const results = searchRes?.data || [];
       if (results.length > 0) {
@@ -173,11 +222,28 @@ async function resolveJustAnime(event, args = {}) {
     return { ok: false, error: "Anime not found on JustAnime" };
   }
 
+  report("stream");
+
+  // Fast path: Race primary servers (revo and gigi) in parallel for near-instant resolution (~300ms)
+  try {
+    const fastResult = await Promise.any([
+      fetchServerStream(targetId, episodeNumber, "revo", mode),
+      fetchServerStream(targetId, episodeNumber, "gigi", mode),
+    ]);
+    if (fastResult?.ok) {
+      report("player");
+      return fastResult;
+    }
+  } catch {
+    // Both fast candidates failed, proceed to fallback discovery
+  }
+
   report("servers");
   let serversData = null;
   try {
     serversData = await fetchJson(
       `${API_BASE}/watch/${targetId}/episode/${episodeNumber}/servers`,
+      { timeout: 5000 }
     );
   } catch (err) {
     return {
@@ -195,64 +261,23 @@ async function resolveJustAnime(event, args = {}) {
     };
   }
 
-  // Build sorted list of servers:
-  // 1. Preferred servers matching requested mode (sub/dub)
-  // 2. Other servers matching requested mode
-  // 3. Fallback to servers with opposite mode
-  const matchingServers = SERVER_PRIORITY.filter(
-    (s) => servers[s] && servers[s][mode],
+  const otherServers = SERVER_PRIORITY.filter(
+    (s) => s !== "revo" && s !== "gigi" && servers[s] && servers[s][mode]
   ).concat(
     serverKeys.filter(
-      (s) => !SERVER_PRIORITY.includes(s) && servers[s] && servers[s][mode],
-    ),
+      (s) => s !== "revo" && s !== "gigi" && servers[s] && servers[s][mode]
+    )
   );
 
-  const fallbackServers = SERVER_PRIORITY.filter(
-    (s) => servers[s] && !servers[s][mode],
-  ).concat(
-    serverKeys.filter(
-      (s) => !SERVER_PRIORITY.includes(s) && servers[s] && !servers[s][mode],
-    ),
-  );
-
-  const orderedServers =
-    matchingServers.length > 0 ? matchingServers : fallbackServers;
-
-  report("stream");
-  for (const s of orderedServers) {
+  for (const s of otherServers) {
     try {
-      const streamRes = await fetchJson(
-        `${API_BASE}/watch/${targetId}/episode/${episodeNumber}/${s}`,
-      );
-      const streamObj =
-        streamRes[mode] ||
-        (mode === "dub" ? streamRes.sub : streamRes.dub);
-
-      if (streamObj?.sources?.length > 0) {
-        const primarySource = streamObj.sources[0];
-        const subtitles = Array.isArray(streamObj.subtitles)
-          ? streamObj.subtitles
-          : [];
-        const referer =
-          streamObj.headers?.Referer || "https://flixcloud.cc/";
-
+      const res = await fetchServerStream(targetId, episodeNumber, s, mode);
+      if (res?.ok) {
         report("player");
-        return {
-          ok: true,
-          url: primarySource.url,
-          quality: primarySource.quality || "auto",
-          isM3U8: primarySource.isM3U8 !== false,
-          referer,
-          subtitle: subtitles[0]?.file || null,
-          subtitles,
-          intro: streamObj.intro || null,
-          outro: streamObj.outro || null,
-          server: s,
-          isDirectMp4: false,
-        };
+        return res;
       }
     } catch {
-      // Continue to next server candidate
+      // try next server
     }
   }
 

@@ -699,19 +699,67 @@ function buildPlayerHtml(videoUrl, startTime, subtitleUrl, nonce) {
 <script nonce="${nonce}">
   const video=document.getElementById('v');
   const src=${jsonForScript(proxied(videoUrl))};
+  const rawUrl=${jsonForScript(videoUrl)};
   const startTime=${start};
-  if(window.Hls&&Hls.isSupported()){
-    const hls=new Hls({autoStartLoad:false});
-    hls.loadSource(src);hls.attachMedia(video);
-    hls.on(Hls.Events.MANIFEST_PARSED,()=>{
-      // start on the best quality (like ani-cli); ABR may still adapt downwards
-      hls.startLevel=hls.levels.length-1;
-      hls.startLoad(startTime>0?startTime:-1);
-      video.play().catch(()=>{});
+  const isMp4=/\.mp4(\?|$)/i.test(rawUrl);
+
+  function startPlayback(){
+    if(startTime>0){
+      video.currentTime=startTime;
+    }
+    const p=video.play();
+    if(p&&typeof p.catch==='function'){
+      p.catch(function(){
+        video.muted=true;
+        video.play().then(function(){
+          function unmute(){
+            video.muted=false;
+            window.removeEventListener('click',unmute);
+            window.removeEventListener('keydown',unmute);
+          }
+          window.addEventListener('click',unmute);
+          window.addEventListener('keydown',unmute);
+        }).catch(function(){});
+      });
+    }
+  }
+
+  if(isMp4){
+    video.src=src;
+    video.addEventListener('loadedmetadata',function(){
+      startPlayback();
+    },{once:true});
+    startPlayback();
+  }else if(window.Hls&&Hls.isSupported()){
+    const hls=new Hls({
+      enableWorker:true,
+      lowLatencyMode:true,
+      backBufferLength:90
+    });
+    hls.loadSource(src);
+    hls.attachMedia(video);
+    hls.on(Hls.Events.MANIFEST_PARSED,function(){
+      startPlayback();
+    });
+    hls.on(Hls.Events.ERROR,function(event,data){
+      if(data.fatal){
+        switch(data.type){
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            hls.recoverMediaError();
+            break;
+          default:
+            hls.destroy();
+            break;
+        }
+      }
     });
   }else if(video.canPlayType('application/vnd.apple.mpegurl')){
     video.src=src;
-    if(startTime>0)video.addEventListener('loadedmetadata',()=>{video.currentTime=startTime;},{once:true});
+    if(startTime>0)video.addEventListener('loadedmetadata',function(){video.currentTime=startTime;},{once:true});
+    startPlayback();
   }
 </script>
 </body></html>`;

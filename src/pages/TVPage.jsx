@@ -488,6 +488,25 @@ export default function TVPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [srcId.id]);
   const [playerFullscreen, setPlayerFullscreen] = useState(false);
+  const [playerControlsVisible, setPlayerControlsVisible] = useState(true);
+  const hideControlsTimerRef = useRef(null);
+
+  const handlePlayerMouseMove = useCallback(() => {
+    setPlayerControlsVisible(true);
+    if (hideControlsTimerRef.current) clearTimeout(hideControlsTimerRef.current);
+    hideControlsTimerRef.current = setTimeout(() => {
+      setPlayerControlsVisible(false);
+    }, 3500);
+  }, []);
+
+  useEffect(() => {
+    if (!playing) return;
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setPlaying(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [playing]);
   const [pipOpen, setPipOpen] = useState(false);
   const pipUrlRef = useRef(null);
   const pipWebContentsIdRef = useRef(null); // cached WebContents ID of the pop-out window
@@ -1765,909 +1784,697 @@ export default function TVPage({
     : false;
 
   return (
-    <div className="fade-in">
+    <div className="netflix-detail-view fade-in">
       {loading && (
         <div className="loader">
           <div className="spinner" />
         </div>
       )}
-      {!loading && (
-        <>
-          <div className="detail-hero">
+
+      {/* ── Dedicated Fullscreen Netflix Player View ── */}
+      {playing && selectedEp && !restricted && (
+        <div
+          className="netflix-dedicated-player"
+          onMouseMove={handlePlayerMouseMove}
+          ref={playerWrapRef}
+        >
+          {/* Top Bar */}
+          <div className={`netflix-player-topbar ${playerControlsVisible ? "" : "hidden"}`}>
+            <button
+              className="netflix-player-back-btn"
+              onClick={() => setPlaying(false)}
+              title="Return to Details (Esc)"
+            >
+              <BackIcon />
+              <span>Back to Details</span>
+            </button>
+
+            <div className="netflix-player-title-info">
+              <span>{title}</span>
+              <span className="netflix-player-ep-pill">
+                S{selectedSeason}:E{selectedEp.episode_number}
+              </span>
+              <span style={{ color: "#d2d2d2" }}>{selectedEp.name}</span>
+            </div>
+
+            <div className="netflix-player-controls-right">
+              {nextEp && (
+                <button
+                  className="netflix-player-btn"
+                  onClick={() => playEpisode(nextEp)}
+                  title="Next Episode"
+                >
+                  <span>⏭ Next Ep</span>
+                </button>
+              )}
+
+              {/* Source Selector */}
+              <button
+                ref={sourceRef}
+                className="netflix-player-btn"
+                onClick={() => {
+                  const rect = sourceRef.current?.getBoundingClientRect();
+                  if (rect) setMenuPos({ top: rect.bottom + 6, left: rect.left });
+                  setShowSourceMenu((v) => !v);
+                }}
+                title="Change source"
+              >
+                <SourceIcon />
+                <span>{PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "Source"}</span>
+              </button>
+
+              {/* Sub/Dub toggle */}
+              {(isAsync || (isAnime && sourceSupportsAnime(playerSource))) && (
+                <button
+                  className="netflix-player-btn"
+                  onClick={() => {
+                    const next = dubMode === "sub" ? "dub" : "sub";
+                    setDubMode(next);
+                    storage.set(STORAGE_KEYS.HIANIME_DUB_MODE, next);
+                    setM3u8Url(null);
+                    setInterceptedSubs([]);
+                    resolvedPlayerUrlRef.current = null;
+                    setResolvedPlayerUrl(null);
+                    resolvingUrlRef.current = false;
+                    setResolvingUrl(false);
+                    setResolveError(null);
+                  }}
+                  title="Toggle Sub/Dub"
+                >
+                  {dubMode === "sub" ? "SUB" : "DUB"}
+                </button>
+              )}
+
+              {/* Blocked ads badge */}
+              <button
+                className="netflix-player-btn"
+                onClick={() => {
+                  setShowSourceMenu(false);
+                  setShowBlockedModal(true);
+                }}
+                title="Blocked ads & trackers"
+              >
+                <ShieldBlockIcon />
+                {blockedSession > 0 && <span>{blockedSession}</span>}
+              </button>
+
+              {/* Download button */}
+              <button
+                className="netflix-player-btn"
+                onClick={() =>
+                  currentEpDownload
+                    ? onGoToDownloads?.(currentEpDownload.id)
+                    : (setShowSourceMenu(false), setShowDownload(true))
+                }
+                title="Download Episode"
+              >
+                <DownloadIcon />
+              </button>
+
+              {/* Pop-out button */}
+              <button
+                className="netflix-player-btn"
+                onClick={() => {
+                  if (pipOpen) {
+                    window.electron?.closePipWindow?.();
+                    return;
+                  }
+                  const url = isAsync ? resolvedPlayerUrl : playerDirectUrl;
+                  if (!url) return;
+                  pipUrlRef.current = url;
+                  window.electron?.openPipWindow?.(
+                    url,
+                    `${item.name} S${selectedSeason}E${selectedEp.episode_number}`,
+                    sourceUsesCleanUa(playerSource) ? CLEAN_USER_AGENT : null,
+                  );
+                }}
+                title={pipOpen ? "Close pop-out" : "Pop out player"}
+                disabled={!pipOpen && (webviewLoading || !!(isAsync && !resolvedPlayerUrl))}
+                style={pipOpen ? { color: "var(--red)" } : undefined}
+              >
+                <PopOutIcon />
+              </button>
+            </div>
+          </div>
+
+          {/* Source Dropdown Menu */}
+          {showSourceMenu && menuPos && (
             <div
-              className="detail-bg"
-              style={{
-                backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
-              }}
-            />
-            <div className="detail-gradient" />
-            <div className="detail-content">
-              <div className="detail-poster">
-                {d.poster_path ? (
-                  <img src={imgUrl(d.poster_path)} alt={title} loading="lazy" />
+              className="source-dropdown source-dropdown--fixed"
+              style={{ top: menuPos.top, left: menuPos.left, zIndex: 100000 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {availableSources.map((src) => (
+                <button
+                  key={src.id}
+                  className={
+                    "source-dropdown__item" +
+                    (playerSource === src.id ? " source-dropdown__item--active" : "")
+                  }
+                  onClick={() => {
+                    setShowSourceMenu(false);
+                    if (src.id === playerSource) return;
+                    clearFailoverSource(`tv_${item.id}_${dubMode}`);
+                    setPlayerSource(src.id);
+                    storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
+                    setM3u8Url(null);
+                    setInterceptedSubs([]);
+                    resolvedPlayerUrlRef.current = null;
+                    setResolvedPlayerUrl(null);
+                    resolvingUrlRef.current = false;
+                    setResolvingUrl(false);
+                    setResolveError(null);
+                  }}
+                >
+                  <span>{src.label}</span>
+                  {src.tag && <span className="source-dropdown__tag">{src.tag}</span>}
+                  {src.note && <span className="source-dropdown__note">{src.note}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Viewport & Webview & Overlays */}
+          <div className="netflix-player-viewport">
+            {/* Loading Overlay */}
+            {webviewLoading && !resolveError && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.92)",
+                  gap: 14,
+                }}
+              >
+                {sourceIsAsync(playerSource) ? (
+                  <HiAnimeLoader
+                    what="episode"
+                    playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
+                    provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
+                  />
                 ) : (
+                  <>
+                    <div className="spinner" />
+                    <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                      {`Loading ${PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "source"}…`}
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Error Overlay */}
+            {isAsync && resolveError && !resolvingUrl && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 10,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.85)",
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>⚠️</span>
+                <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                  Episode not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>{resolveError}</span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>
+                  Try a different source, or switch sub/dub.
+                </span>
+              </div>
+            )}
+
+            {/* ID Error */}
+            {srcId.error && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 11,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.85)",
+                  gap: 10,
+                }}
+              >
+                <span style={{ fontSize: 28 }}>⚠️</span>
+                <span style={{ fontSize: 14, color: "var(--text2)" }}>
+                  Could not resolve the {srcId.idLabel} for this title
+                </span>
+                <span style={{ fontSize: 12, color: "var(--text3)" }}>
+                  {srcId.error}. Try a different source.
+                </span>
+              </div>
+            )}
+
+            {/* Pop-out Screen */}
+            {pipOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  background: "rgba(0,0,0,0.92)",
+                  gap: 16,
+                }}
+              >
+                <PopOutIcon size={36} />
+                <span style={{ fontSize: 15, color: "var(--text1)", fontWeight: 600 }}>
+                  Playing in pop-out window
+                </span>
+                <button
+                  className="netflix-player-btn"
+                  onClick={() => window.electron?.closePipWindow?.()}
+                  style={{ marginTop: 4 }}
+                >
+                  Close pop-out &amp; return
+                </button>
+              </div>
+            )}
+
+            {/* Autoplay Countdown Overlay */}
+            {autoplayCountdown !== null && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  zIndex: 30,
+                  display: "flex",
+                  justifyContent:
+                    autoplayNextLayout === "left" ? "flex-start" : "flex-end",
+                  background: "rgba(0,0,0,0.88)",
+                  backdropFilter: "blur(6px)",
+                  animation: "fadeIn 0.4s ease",
+                }}
+              >
+                <div
+                  style={{
+                    width: "40%",
+                    minWidth: "320px",
+                    maxWidth: "480px",
+                    height: "100%",
+                    background:
+                      autoplayNextLayout === "left"
+                        ? "linear-gradient(90deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%)"
+                        : "linear-gradient(270deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%)",
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
+                    padding: "40px",
+                    boxSizing: "border-box",
+                    textAlign: "left",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: "11px",
+                      fontWeight: "700",
+                      letterSpacing: "1.5px",
+                      textTransform: "uppercase",
+                      color: "var(--red)",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    Up Next
+                  </div>
+
                   <div
                     style={{
                       width: "100%",
-                      height: "100%",
+                      aspectRatio: "16/9",
+                      borderRadius: "8px",
+                      overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.1)",
+                      marginBottom: "18px",
+                      boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
+                      background: "var(--surface3)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "var(--text3)",
                     }}
                   >
-                    <TVIcon />
-                  </div>
-                )}
-              </div>
-              <div className="detail-info">
-                <div className="detail-type">Series</div>
-                <div className="detail-title">{title}</div>
-                <div className="genres">
-                  {displayGenres.map((g) => (
-                    <span key={g.id} className="genre-tag">
-                      {g.name}
-                    </span>
-                  ))}
-                </div>
-                <div className="detail-meta">
-                  {displayScore && (
-                    <span className="detail-rating">
-                      <StarIcon /> {displayScore}
-                    </span>
-                  )}
-                  {year && <span>{year}</span>}
-                  {displaySeasonCount > 0 && (
-                    <span>
-                      {displaySeasonCount} Season
-                      {displaySeasonCount !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  {displayEpisodeCount > 0 && (
-                    <span>
-                      {displayEpisodeCount} Episode
-                      {displayEpisodeCount !== 1 ? "s" : ""}
-                    </span>
-                  )}
-                  <span>{status}</span>
-                </div>
-                {rating.cert && (
-                  <div
-                    className={`age-rating-pill${restricted ? " age-rating-pill--restricted" : ""}`}
-                  >
-                    {restricted ? (
-                      <RatingLockIcon size={13} />
+                    {nextEp?.still_path ? (
+                      <img
+                        src={imgUrl(nextEp.still_path, "w300")}
+                        alt={nextEp?.name}
+                        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      />
                     ) : (
-                      <RatingShieldIcon size={13} />
-                    )}
-                    <span className="age-rating-pill-cert">{rating.cert}</span>
-                    {restricted && (
-                      <span className="age-rating-pill-label">
-                        Inappropriate for your age setting
+                      <span style={{ display: "inline-flex", width: 32, height: 32, color: "var(--text3)" }}>
+                        <PlayIcon />
                       </span>
                     )}
                   </div>
-                )}
-                <p className="detail-overview">{displayOverview}</p>
-                <div className="detail-actions">
-                  {trailerKey &&
-                    (restricted ? (
-                      <button
-                        className="btn btn-secondary btn-restricted"
-                        disabled
-                        title="Inappropriate for your age rating setting"
-                      >
-                        🔒 Trailer
-                      </button>
-                    ) : (
-                      <button
-                        className="btn btn-secondary"
-                        onClick={() => setShowTrailer(true)}
-                      >
-                        <TrailerIcon /> Trailer
-                      </button>
-                    ))}
-                  <button
-                    className="btn btn-secondary"
-                    onClick={() => setShowCast(true)}
-                  >
-                    <CastIcon /> Cast
-                  </button>
-                  <button className="btn btn-secondary" onClick={onSave}>
-                    {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-                    {isSaved ? "Saved" : "Save"}
-                  </button>
-                  <button className="btn btn-ghost" onClick={onBack}>
-                    <BackIcon /> Back
-                  </button>
+
+                  <div style={{ fontSize: "13px", fontWeight: "600", color: "var(--text2)", marginBottom: "4px" }}>
+                    Season {selectedSeason} · Episode {nextEp?.episode_number}
+                  </div>
+                  <div style={{ fontSize: "20px", fontWeight: "700", color: "white", marginBottom: "8px", lineHeight: "1.3" }}>
+                    {nextEp?.name}
+                  </div>
+
+                  {autoplayCountdown > 0 ? (
+                    <div style={{ fontSize: "14px", color: "var(--text3)", marginBottom: "20px" }}>
+                      Starting in <span style={{ color: "white", fontWeight: "600" }}>{autoplayCountdown}</span>s...
+                    </div>
+                  ) : (
+                    <div style={{ height: "20px", marginBottom: "20px" }} />
+                  )}
+
+                  <div style={{ display: "flex", gap: "12px", marginTop: "4px" }}>
+                    <button
+                      className="btn btn-primary"
+                      style={{
+                        padding: "10px 22px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        background: "var(--red)",
+                        borderColor: "var(--red)",
+                        boxShadow: "var(--red-glow)",
+                      }}
+                      onClick={playNow}
+                    >
+                      Play Now
+                    </button>
+                    <button
+                      className="btn btn-ghost"
+                      style={{
+                        padding: "10px 22px",
+                        fontSize: "14px",
+                        fontWeight: "600",
+                        background: "rgba(255,255,255,0.05)",
+                      }}
+                      onClick={cancelAutoplay}
+                    >
+                      Cancel
+                    </button>
+                  </div>
                 </div>
+              </div>
+            )}
+
+            {/* AniSkip manual skip button */}
+            {skipPrompt && (
+              <button
+                onClick={handleManualSkip}
+                style={{
+                  position: "absolute",
+                  bottom: 24,
+                  right: 24,
+                  zIndex: 50,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 1,
+                  background: "rgba(0,0,0,0.72)",
+                  border: "1px solid rgba(255,255,255,0.18)",
+                  borderRadius: 8,
+                  color: "white",
+                  cursor: "pointer",
+                  padding: "9px 18px",
+                  backdropFilter: "blur(6px)",
+                }}
+              >
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1 }}>SKIP</span>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.7)", letterSpacing: 1 }}>
+                  {skipPrompt === "intro" ? "INTRO" : "OUTRO"}
+                </span>
+              </button>
+            )}
+
+            <webview
+              ref={webviewRef}
+              key={sourceUsesCleanUa(playerSource) ? "ua-clean" : "ua-default"}
+              useragent={sourceUsesCleanUa(playerSource) ? CLEAN_USER_AGENT : undefined}
+              src={
+                pipOpen
+                  ? "about:blank"
+                  : isAsync
+                    ? resolvedPlayerUrl || "about:blank"
+                    : playerDirectUrl || "about:blank"
+              }
+              partition="persist:player"
+              allowpopups="false"
+              sandbox="allow-scripts allow-same-origin allow-forms"
+              style={{
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                border: "none",
+                visibility:
+                  webviewLoading || (isAsync && !resolvedPlayerUrl)
+                    ? "hidden"
+                    : "visible",
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Netflix Detail Hero ── */}
+      {!loading && (
+        <>
+          <div
+            className="netflix-hero"
+            style={{
+              backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
+            }}
+          >
+            <div className="netflix-hero-vignette" />
+            <div className="netflix-hero-content">
+              <div className="netflix-brand-badge">
+                <span className="netflix-n-logo">N</span>
+                <span className="netflix-type-label">SERIES</span>
+              </div>
+
+              <h1 className="netflix-hero-title">{title}</h1>
+
+              <div className="netflix-meta-row">
+                <span className="netflix-match">
+                  {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
+                </span>
+                {year && <span className="netflix-year">{year}</span>}
+                {rating.cert && (
+                  <span className="netflix-badge-rating">{rating.cert}</span>
+                )}
+                {displaySeasonCount > 0 && (
+                  <span className="netflix-year">
+                    {displaySeasonCount} Season{displaySeasonCount !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {displayEpisodeCount > 0 && (
+                  <span className="netflix-year" style={{ color: "#8c8c8c" }}>
+                    ({displayEpisodeCount} Episodes)
+                  </span>
+                )}
+                <span className="netflix-badge-tech">HD</span>
+                <span className="netflix-badge-tech">5.1</span>
+              </div>
+
+              <div className="netflix-hero-actions">
+                <button
+                  className="netflix-btn-play"
+                  onClick={() => {
+                    const ep = selectedEp || currentSeasonEpisodes?.[0] || { episode_number: 1, name: "Episode 1" };
+                    playEpisode(ep);
+                  }}
+                >
+                  <PlayIcon />
+                  <span>
+                    {selectedEp && progress[`tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`] > 0
+                      ? "Resume"
+                      : "Play"}
+                  </span>
+                </button>
+
+                <button
+                  className="netflix-btn-circle"
+                  onClick={onSave}
+                  title={isSaved ? "Saved to List" : "Add to List"}
+                >
+                  {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
+                </button>
+
+                {trailerKey && !restricted && (
+                  <button
+                    className="netflix-btn-circle"
+                    onClick={() => setShowTrailer(true)}
+                    title="Watch Trailer"
+                  >
+                    <TrailerIcon />
+                  </button>
+                )}
+
+                <button
+                  className="netflix-btn-circle"
+                  onClick={() => setShowCast(true)}
+                  title="View Cast & Crew"
+                >
+                  <CastIcon />
+                </button>
+
+                <button className="netflix-btn-back" onClick={onBack}>
+                  <BackIcon /> Back
+                </button>
               </div>
             </div>
           </div>
 
-          {playing && selectedEp && (
-            <div className="section">
-              <div
-                style={{
-                  marginBottom: 12,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                }}
-              >
-                <span className="tag tag-red">
-                  Season {selectedSeason} · E{selectedEp.episode_number}
-                </span>
-                <span style={{ fontSize: 14, fontWeight: 500 }}>
-                  {selectedEp.name}
-                </span>
-                {currentEpWatched ? (
-                  <button
-                    className="btn btn-ghost watched-btn"
-                    style={{ marginLeft: "auto" }}
-                    onClick={() => onMarkUnwatched?.(currentProgressKey)}
-                  >
-                    <WatchedIcon size={14} /> Watched
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-ghost"
-                    style={{ marginLeft: "auto" }}
-                    onClick={() => onMarkWatched?.(currentProgressKey)}
-                  >
-                    ✓ Mark Watched
-                  </button>
-                )}
-              </div>
-              <div
-                className={`player-wrap${playerFullscreen ? " player-wrap--fullscreen" : ""}`}
-                ref={playerWrapRef}
-              >
-                {/* Universal source-loading overlay, shown instantly on every source/episode switch */}
-                {webviewLoading && !resolveError && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 10,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "rgba(0,0,0,0.92)",
-                      gap: 14,
-                      borderRadius: "inherit",
-                    }}
-                  >
-                    {sourceIsAsync(playerSource) ? (
-                      <HiAnimeLoader
-                        what="episode"
-                        playerStarting={!resolvingUrl && !!resolvedPlayerUrl}
-                        provider={playerSource === "justanime" ? "JustAnime" : "HiAnime"}
-                      />
-                    ) : (
-                      <>
-                        <div className="spinner" />
-                        <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                          {`Loading ${PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ?? "source"}…`}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )}
-                {/* error if lookup failed */}
-                {isAsync && resolveError && !resolvingUrl && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 10,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "rgba(0,0,0,0.85)",
-                      gap: 10,
-                      borderRadius: "inherit",
-                    }}
-                  >
-                    <span style={{ fontSize: 28 }}>⚠️</span>
-                    <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                      Episode not found on {playerSource === "justanime" ? "JustAnime" : "HiAnime"}
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                      {resolveError}
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                      Try a different source, or switch sub/dub.
-                    </span>
-                  </div>
-                )}
-                {/* ID conversion failed (sources that need an IMDb / Kinopoisk ID) */}
-                {srcId.error && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 11,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "rgba(0,0,0,0.85)",
-                      gap: 10,
-                      borderRadius: "inherit",
-                    }}
-                  >
-                    <span style={{ fontSize: 28 }}>⚠️</span>
-                    <span style={{ fontSize: 14, color: "var(--text2)" }}>
-                      Could not resolve the {srcId.idLabel} for this title
-                    </span>
-                    <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                      {srcId.error}. Try a different source.
-                    </span>
-                  </div>
-                )}
-                {/* Pop-out active: main stream paused, pop-out has real player */}
-                {pipOpen && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 20,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      background: "rgba(0,0,0,0.92)",
-                      gap: 16,
-                      borderRadius: "inherit",
-                    }}
-                  >
-                    <PopOutIcon size={36} />
-                    <span
-                      style={{
-                        fontSize: 15,
-                        color: "var(--text1)",
-                        fontWeight: 600,
-                      }}
-                    >
-                      Playing in pop-out window
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 12,
-                        color: "var(--text2)",
-                        textAlign: "center",
-                        maxWidth: 260,
-                      }}
-                    >
-                      Closing the pop-out will reload the player here.
-                    </span>
-                    <button
-                      className="player-overlay-btn"
-                      onClick={() => window.electron?.closePipWindow?.()}
-                      style={{ marginTop: 4 }}
-                    >
-                      Close pop-out &amp; return
-                    </button>
-                  </div>
-                )}
-                {autoplayCountdown !== null && (
-                  <div
-                    style={{
-                      position: "absolute",
-                      inset: 0,
-                      zIndex: 30,
-                      display: "flex",
-                      justifyContent:
-                        autoplayNextLayout === "left"
-                          ? "flex-start"
-                          : "flex-end",
-                      background: "rgba(0,0,0,0.88)",
-                      borderRadius: "inherit",
-                      backdropFilter: "blur(6px)",
-                      animation: "fadeIn 0.4s ease",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "40%",
-                        minWidth: "320px",
-                        maxWidth: "480px",
-                        height: "100%",
-                        background:
-                          autoplayNextLayout === "left"
-                            ? "linear-gradient(90deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%)"
-                            : "linear-gradient(270deg, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.85) 60%, rgba(0,0,0,0) 100%)",
-                        display: "flex",
-                        flexDirection: "column",
-                        justifyContent: "center",
-                        padding: "40px",
-                        boxSizing: "border-box",
-                        textAlign: "left",
-                      }}
-                    >
-                      <div
-                        style={{
-                          fontSize: "11px",
-                          fontWeight: "700",
-                          letterSpacing: "1.5px",
-                          textTransform: "uppercase",
-                          color: "var(--red)",
-                          marginBottom: "8px",
-                        }}
-                      >
-                        Up Next
-                      </div>
-
-                      {/* Cover Still */}
-                      <div
-                        style={{
-                          width: "100%",
-                          aspectRatio: "16/9",
-                          borderRadius: "8px",
-                          overflow: "hidden",
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          marginBottom: "18px",
-                          boxShadow: "0 8px 24px rgba(0,0,0,0.6)",
-                          background: "var(--surface3)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
-                      >
-                        {nextEp?.still_path ? (
-                          <img
-                            src={imgUrl(nextEp.still_path, "w300")}
-                            alt={nextEp?.name}
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              objectFit: "cover",
-                            }}
-                          />
-                        ) : (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              width: 32,
-                              height: 32,
-                              color: "var(--text3)",
-                            }}
-                          >
-                            <PlayIcon />
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Episode Meta */}
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          fontWeight: "600",
-                          color: "var(--text2)",
-                          marginBottom: "4px",
-                        }}
-                      >
-                        Season {selectedSeason} · Episode{" "}
-                        {nextEp?.episode_number}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "20px",
-                          fontWeight: "700",
-                          color: "white",
-                          marginBottom: "8px",
-                          lineHeight: "1.3",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {nextEp?.name}
-                      </div>
-
-                      {/* Countdown */}
-                      {autoplayCountdown > 0 ? (
-                        <div
-                          style={{
-                            fontSize: "14px",
-                            color: "var(--text3)",
-                            marginBottom: "20px",
-                          }}
-                        >
-                          Starting in{" "}
-                          <span style={{ color: "white", fontWeight: "600" }}>
-                            {autoplayCountdown}
-                          </span>
-                          s...
-                        </div>
-                      ) : (
-                        <div style={{ height: "20px", marginBottom: "20px" }} />
-                      )}
-
-                      {/* Buttons */}
-                      <div
-                        style={{
-                          display: "flex",
-                          gap: "12px",
-                          marginTop: "4px",
-                        }}
-                      >
-                        <button
-                          className="btn btn-primary"
-                          style={{
-                            padding: "10px 22px",
-                            fontSize: "14px",
-                            fontWeight: "600",
-                            background: "var(--red)",
-                            borderColor: "var(--red)",
-                            boxShadow: "var(--red-glow)",
-                          }}
-                          onClick={playNow}
-                        >
-                          Play Now
-                        </button>
-                        <button
-                          className="btn btn-ghost"
-                          style={{
-                            padding: "10px 22px",
-                            fontSize: "14px",
-                            fontWeight: "600",
-                            background: "rgba(255,255,255,0.05)",
-                          }}
-                          onClick={cancelAutoplay}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <webview
-                  ref={webviewRef}
-                  // A fresh guest per UA mode: loadURL's userAgent override sticks
-                  // to the WebContents, so it can't be unset on a reused webview.
-                  key={
-                    sourceUsesCleanUa(playerSource) ? "ua-clean" : "ua-default"
-                  }
-                  useragent={
-                    sourceUsesCleanUa(playerSource)
-                      ? CLEAN_USER_AGENT
-                      : undefined
-                  }
-                  src={
-                    pipOpen
-                      ? "about:blank"
-                      : isAsync
-                        ? resolvedPlayerUrl || "about:blank"
-                        : playerDirectUrl || "about:blank"
-                  }
-                  partition="persist:player"
-                  allowpopups="false"
-                  sandbox="allow-scripts allow-same-origin allow-forms"
-                  style={{
-                    position: "absolute",
-                    inset: 0,
-                    width: "100%",
-                    height: "100%",
-                    border: "none",
-                    outline: "none",
-                    boxShadow: "none",
-                    background: "black",
-                    visibility:
-                      webviewLoading || (isAsync && !resolvedPlayerUrl)
-                        ? "hidden"
-                        : "visible",
-                  }}
-                  tabIndex={-1}
-                />
-                {/* Left-side overlay button group, flex row, no fixed px offsets */}
-                <div className="player-overlay-group">
-                  <button
-                    ref={sourceRef}
-                    className="player-overlay-btn"
-                    onClick={() => {
-                      const rect = sourceRef.current?.getBoundingClientRect();
-                      if (rect)
-                        setMenuPos({ top: rect.bottom + 6, left: rect.left });
-                      setShowSourceMenu((v) => !v);
-                    }}
-                    title="Change source"
-                  >
-                    <SourceIcon />
-                    {PLAYER_SOURCES.find((s) => s.id === playerSource)?.label ??
-                      "Source"}
-                  </button>
-                  {/* Sub/Dub toggle: HiAnime, and anime-capable sources (Vidnest) on anime titles */}
-                  {(isAsync ||
-                    (isAnime && sourceSupportsAnime(playerSource))) && (
-                    <button
-                      className="player-overlay-btn"
-                      onClick={() => {
-                        const next = dubMode === "sub" ? "dub" : "sub";
-                        setDubMode(next);
-                        storage.set(STORAGE_KEYS.HIANIME_DUB_MODE, next);
-                        setM3u8Url(null);
-                        setInterceptedSubs([]);
-                        resolvedPlayerUrlRef.current = null;
-                        setResolvedPlayerUrl(null);
-                        resolvingUrlRef.current = false;
-                        setResolvingUrl(false);
-                        setResolveError(null);
-                      }}
-                      title="Toggle Sub/Dub"
-                    >
-                      {dubMode === "sub" ? "SUB" : "DUB"}
-                    </button>
-                  )}
-                  {/* Blocked ads & trackers button */}
-                  <button
-                    className="player-overlay-btn"
-                    onClick={() => {
-                      setShowSourceMenu(false);
-                      setShowBlockedModal(true);
-                    }}
-                    title="Blocked ads & trackers"
-                  >
-                    <ShieldBlockIcon />
-                    {blockedSession > 0 && (
-                      <span className="player-blocked-badge">
-                        {blockedSession}
-                      </span>
-                    )}
-                  </button>
-                  {/* Pop-out button */}
-                  <button
-                    className="player-overlay-btn"
-                    onClick={() => {
-                      if (pipOpen) {
-                        window.electron?.closePipWindow?.();
-                        return;
-                      }
-                      const url = isAsync ? resolvedPlayerUrl : playerDirectUrl;
-                      if (!url) return;
-                      pipUrlRef.current = url;
-                      window.electron?.openPipWindow?.(
-                        url,
-                        item.name ?? item.title,
-                        sourceUsesCleanUa(playerSource)
-                          ? CLEAN_USER_AGENT
-                          : null,
-                      );
-                    }}
-                    title={pipOpen ? "Close pop-out" : "Pop out player"}
-                    disabled={
-                      !pipOpen &&
-                      (webviewLoading || !!(isAsync && !resolvedPlayerUrl))
-                    }
-                    style={pipOpen ? { color: "var(--red)" } : undefined}
-                  >
-                    <PopOutIcon />
-                  </button>
-                </div>
-                {showSourceMenu && menuPos && (
-                  <div
-                    className="source-dropdown source-dropdown--fixed"
-                    style={{ top: menuPos.top, left: menuPos.left }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {PLAYER_SOURCES.filter((src) => !src.movieOnly).map(
-                      (src) => (
-                        <button
-                          key={src.id}
-                          className={
-                            "source-dropdown__item" +
-                            (playerSource === src.id
-                              ? " source-dropdown__item--active"
-                              : "")
-                          }
-                          onClick={() => {
-                            setShowSourceMenu(false);
-                            if (src.id === playerSource) return;
-                            // Manual selection wins over auto-failover
-                            if (selectedEp) {
-                              clearFailoverSource(
-                                `tv_${item.id}_s${selectedSeason}_e${selectedEp.episode_number}_${dubMode}`,
-                              );
-                            }
-                            setPlayerSource(src.id);
-                            storage.set(STORAGE_KEYS.PLAYER_SOURCE, src.id);
-                            setM3u8Url(null);
-                            setInterceptedSubs([]);
-                            resolvedPlayerUrlRef.current = null;
-                            setResolvedPlayerUrl(null);
-                            resolvingUrlRef.current = false;
-                            setResolvingUrl(false);
-                            setResolveError(null);
-                          }}
-                        >
-                          <span>{src.label}</span>
-                          {src.tag && (
-                            <span className="source-dropdown__tag">
-                              {src.tag}
-                            </span>
-                          )}
-                          {src.note && (
-                            <span className="source-dropdown__note">
-                              {src.note}
-                            </span>
-                          )}
-                        </button>
-                      ),
-                    )}
-                  </div>
-                )}
-                <button
-                  className="player-overlay-btn"
-                  onClick={() =>
-                    currentEpDownload
-                      ? onGoToDownloads?.(currentEpDownload.id)
-                      : (setShowSourceMenu(false), setShowDownload(true))
-                  }
-                  title={
-                    currentEpDownload
-                      ? currentEpDownload.status === "downloading"
-                        ? "Downloading… - view in Downloads"
-                        : "Already downloaded - view in Downloads"
-                      : "Download"
-                  }
-                >
-                  {currentEpDownload ? (
-                    <span
-                      className="player-downloaded-icon"
-                      style={{
-                        color:
-                          currentEpDownload.status === "downloading"
-                            ? "var(--red)"
-                            : "#4caf50",
-                      }}
-                    >
-                      {currentEpDownload.status === "downloading" ? "↓" : "✓"}
-                    </span>
-                  ) : (
-                    <DownloadIcon />
-                  )}
-                  {!currentEpDownload && m3u8Url && (
-                    <span className="player-overlay-dot" />
-                  )}
-                  {!supportsProgress && (
-                    <span
-                      className="player-no-progress-hint"
-                      title="No automatic progress tracking for this source"
-                    >
-                      ⚠ no tracking
-                    </span>
-                  )}
-                </button>
-
-                {/* Skip controls are injected directly into the webview DOM*/}
-
-                {/* AniSkip manual prompt, rendered in streambert UI, outside webview */}
-                {skipPrompt && (
-                  <button
-                    onClick={handleManualSkip}
-                    style={{
-                      position: "absolute",
-                      bottom: 24,
-                      right: 24,
-                      zIndex: 50,
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 1,
-                      background: "rgba(0,0,0,0.72)",
-                      border: "1px solid rgba(255,255,255,0.18)",
-                      borderRadius: 8,
-                      color: "white",
-                      cursor: "pointer",
-                      padding: "9px 18px",
-                      backdropFilter: "blur(6px)",
-                      WebkitBackdropFilter: "blur(6px)",
-                      transition: "background 0.15s, border-color 0.15s",
-                      fontFamily: "var(--font-body)",
-                      animation: "slideDown 0.2s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = "rgba(229,9,20,0.85)";
-                      e.currentTarget.style.borderColor = "rgba(229,9,20,0.5)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "rgba(0,0,0,0.72)";
-                      e.currentTarget.style.borderColor =
-                        "rgba(255,255,255,0.18)";
-                    }}
-                  >
-                    <span
-                      style={{
-                        fontSize: 11,
-                        fontWeight: 700,
-                        letterSpacing: 1,
-                      }}
-                    >
-                      SKIP
-                    </span>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        color: "rgba(255,255,255,0.7)",
-                        letterSpacing: 1,
-                      }}
-                    >
-                      {skipPrompt === "intro" ? "INTRO" : "OUTRO"}
-                    </span>
-                  </button>
-                )}
+          {/* ── Netflix 2-Column Overview & Meta ── */}
+          <div className="netflix-body-container">
+            <div className="netflix-info-grid">
+              <div>
+                <p className="netflix-synopsis">{displayOverview}</p>
               </div>
 
-              {currentProgressKey &&
-                (() => {
-                  const epPct = progress[currentProgressKey] || 0;
-                  const dur = durationRef.current;
-                  const hasMarkers =
-                    dur > 0 && (skipTimings?.intro || skipTimings?.outro);
-                  return epPct > 0 || hasMarkers ? (
-                    <div className="progress-bar-row">
-                      <div
-                        className="progress-bar-outer"
-                        style={{ position: "relative" }}
-                      >
-                        <div
-                          className="progress-bar-fill"
-                          style={{ width: `${Math.min(epPct, 100)}%` }}
-                        />
-                        {/* AniSkip intro/outro markers */}
-                        {dur > 0 && skipTimings?.intro && (
-                          <div
-                            title="Intro"
-                            style={{
-                              position: "absolute",
-                              top: 0,
-                              left: `${(skipTimings.intro.startTime / dur) * 100}%`,
-                              width: `${((skipTimings.intro.endTime - skipTimings.intro.startTime) / dur) * 100}%`,
-                              height: "100%",
-                              background: "rgba(251,191,36,0.75)",
-                              borderRadius: 2,
-                              pointerEvents: "none",
-                            }}
-                          />
-                        )}
-                        {dur > 0 && skipTimings?.outro && (
-                          <div
-                            title="Outro"
-                            style={{
-                              position: "absolute",
-                              top: 0,
-                              left: `${(skipTimings.outro.startTime / dur) * 100}%`,
-                              width: `${((skipTimings.outro.endTime - skipTimings.outro.startTime) / dur) * 100}%`,
-                              height: "100%",
-                              background: "rgba(251,191,36,0.75)",
-                              borderRadius: 2,
-                              pointerEvents: "none",
-                            }}
-                          />
-                        )}
-                      </div>
-                      <span style={{ fontSize: 12, color: "var(--text3)" }}>
-                        {epPct > 0 ? `${epPct.toFixed(0)}% watched` : ""}
-                      </span>
-                    </div>
-                  ) : null;
-                })()}
-              {currentProgressKey && (
-                <div className="progress-mark-row">
-                  <span
-                    style={{
-                      fontSize: 12,
-                      color: "var(--text3)",
-                      marginRight: 4,
-                    }}
-                  >
-                    Mark progress:
-                  </span>
-                  {[25, 50, 75, 100].map((p) => (
-                    <button
-                      key={p}
-                      className="btn btn-ghost"
-                      style={{ padding: "5px 14px", fontSize: 12 }}
-                      onClick={() => saveProgress(currentProgressKey, p)}
-                    >
-                      {p}%
-                    </button>
-                  ))}
-                </div>
-              )}
+              <div className="netflix-sidebar">
+                {credits?.cast?.length > 0 && (
+                  <div className="netflix-meta-block">
+                    <span className="netflix-meta-label">Cast:</span>
+                    <span className="netflix-meta-value">
+                      {credits.cast.slice(0, 4).map((c) => c.name).join(", ")}
+                    </span>
+                  </div>
+                )}
+
+                {displayGenres.length > 0 && (
+                  <div className="netflix-meta-block">
+                    <span className="netflix-meta-label">Genres:</span>
+                    <span className="netflix-meta-value">
+                      {displayGenres.map((g) => g.name).join(", ")}
+                    </span>
+                  </div>
+                )}
+
+                {status && (
+                  <div className="netflix-meta-block">
+                    <span className="netflix-meta-label">Status:</span>
+                    <span className="netflix-meta-value">{status}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          )}
 
-          <div className="section">
-            <div className="section-title">Episodes</div>
-            {seasons.length > 0 && (
-              <div className="season-selector">
-                {seasons.map((s) => {
-                  const sw = seasonWatchedMap[s.season_number] ?? "none";
-                  return (
-                    <button
-                      key={s.season_number}
-                      className={`season-btn ${selectedSeason === s.season_number ? "active" : ""} ${sw === "all" ? "season-watched" : sw.startsWith("some") ? "season-partial" : ""}`}
-                      onClick={() => setSelectedSeason(s.season_number)}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        setSeasonMenu({
-                          x: e.clientX,
-                          y: e.clientY,
-                          seasonNum: s.season_number,
-                        });
-                      }}
-                      title="Right-click to mark season as watched/unwatched"
-                    >
-                      {sw === "all" && (
-                        <span className="season-watched-icon">✓</span>
-                      )}
-                      {sw === "some25" && <PartialCircleIcon pct={25} />}
-                      {sw === "some50" && <PartialCircleIcon pct={50} />}
-                      {sw === "some75" && <PartialCircleIcon pct={75} />}
-                      {s.season_number === 0
-                        ? "Specials"
-                        : `Season ${s.season_number}`}
-                    </button>
-                  );
-                })}
+            {/* ── Netflix Episodes Section ── */}
+            <div className="netflix-episodes-section">
+              <div className="netflix-episodes-header">
+                <span className="netflix-episodes-heading">Episodes</span>
+
+                {seasons.length > 0 && (
+                  <select
+                    className="netflix-season-select"
+                    value={selectedSeason}
+                    onChange={(e) => setSelectedSeason(Number(e.target.value))}
+                  >
+                    {seasons.map((s) => (
+                      <option key={s.season_number} value={s.season_number}>
+                        {s.season_number === 0 ? "Specials" : `Season ${s.season_number}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
-            )}
-            {selectedSeason === 0 && !loadingSeason && (
-              <div
-                style={{
-                  margin: "8px 0",
-                  padding: "8px 12px",
-                  borderRadius: 8,
-                  background: "rgba(255,200,50,0.08)",
-                  border: "1px solid rgba(255,200,50,0.2)",
-                  fontSize: 12,
-                  color: "var(--text3)",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <span>⚠️</span>
-                <span>
-                  Specials support varies by provider. If the wrong episode
-                  plays, try switching to a different source. But it can't be
-                  guaranteed that the correct Episode will be available.
-                </span>
-              </div>
-            )}
-            {loadingSeason && (
-              <div className="loader">
-                <div className="spinner" />
-              </div>
-            )}
-            {!loadingSeason &&
-              (seasonData?.episodes || episodeGroupCurrentEpisodes?.length) && (
-                <div className="episodes-grid">
-                  {currentSeasonEpisodes.map((ep) => {
-                    const pk = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
-                    return (
-                      <EpisodeCard
-                        key={ep.episode_number}
-                        ep={ep}
-                        itemId={item.id}
-                        selectedSeason={selectedSeason}
-                        epPct={progress[pk] || 0}
-                        epWatched={!!watched?.[pk]}
-                        playing={playing}
-                        selectedEpNumber={selectedEp?.episode_number}
-                        downloadsByEpisodeKey={downloadsByEpisodeKey}
-                        restricted={restricted}
-                        onPlay={playEpisode}
-                        onContextMenu={setEpMenu}
-                        onGoToDownloads={onGoToDownloads}
-                      />
-                    );
-                  })}
+
+              {loadingSeason && (
+                <div className="loader">
+                  <div className="spinner" />
                 </div>
               )}
+
+              {!loadingSeason &&
+                (seasonData?.episodes || episodeGroupCurrentEpisodes?.length) && (
+                  <div className="netflix-ep-list">
+                    {currentSeasonEpisodes.map((ep) => {
+                      const pk = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
+                      const epPct = progress[pk] || 0;
+                      const isPlayingEp =
+                        playing && selectedEp?.episode_number === ep.episode_number;
+
+                      return (
+                        <div
+                          key={ep.episode_number}
+                          className={`netflix-ep-row ${isPlayingEp ? "active" : ""}`}
+                          onClick={() => playEpisode(ep)}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setEpMenu({ x: e.clientX, y: e.clientY, pk });
+                          }}
+                        >
+                          <div className="netflix-ep-num">{ep.episode_number}</div>
+
+                          <div className="netflix-ep-thumb-wrap">
+                            {ep.still_path ? (
+                              <img
+                                src={imgUrl(ep.still_path, "w300")}
+                                alt={ep.name}
+                                loading="lazy"
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: "100%",
+                                  height: "100%",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  color: "#666",
+                                }}
+                              >
+                                <PlayIcon />
+                              </div>
+                            )}
+
+                            <div className="netflix-ep-hover-play">
+                              <PlayIcon />
+                            </div>
+
+                            {epPct > 0 && (
+                              <div className="netflix-ep-prog-bar">
+                                <div
+                                  className="netflix-ep-prog-fill"
+                                  style={{ width: `${Math.min(epPct, 100)}%` }}
+                                />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="netflix-ep-info">
+                            <div className="netflix-ep-title-bar">
+                              <span className="netflix-ep-name">
+                                {ep.name || `Episode ${ep.episode_number}`}
+                              </span>
+                              <span className="netflix-ep-duration">
+                                {ep.runtime ? `${ep.runtime}m` : ""}
+                              </span>
+                            </div>
+                            <p className="netflix-ep-synopsis">
+                              {ep.overview || "No description available."}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+            </div>
           </div>
         </>
       )}
