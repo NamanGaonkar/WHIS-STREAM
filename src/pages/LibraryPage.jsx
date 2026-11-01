@@ -16,6 +16,7 @@ export default function LibraryPage({
   onMarkWatched,
   onMarkUnwatched,
   onRemoveHistory,
+  onRemoveProgress,
 }) {
   const allItems = useMemo(
     () => [...inProgress, ...saved],
@@ -80,6 +81,7 @@ export default function LibraryPage({
                   onMarkUnwatched={onMarkUnwatched}
                   ageRating={r.cert}
                   restricted={restr}
+                  onRemove={onRemoveProgress ? () => onRemoveProgress(item) : undefined}
                 />
               );
             })}

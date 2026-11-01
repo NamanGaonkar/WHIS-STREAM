@@ -135,6 +135,64 @@ export const tmdbFetch = async (path, apiKey) => {
 //
 export const PLAYER_SOURCES = [
   {
+    id: "vidlink",
+    label: "VidLink",
+    tag: null,
+    note: "Fast, 4K ✓",
+    supportsProgress: true,
+    colorParam: "primaryColor",
+    params: {},
+    movieUrl: (id) => `https://vidlink.pro/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidlink.pro/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "vidsrcsu",
+    label: "VidSrc SU",
+    tag: null,
+    note: null,
+    supportsProgress: true,
+    progressViaFrames: true,
+    params: {},
+    movieUrl: (id) => `https://vidsrc.su/embed/movie/${id}`,
+    tvUrl: (id, season, ep) => `https://vidsrc.su/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "twoembed",
+    label: "2Embed",
+    tag: null,
+    note: null,
+    supportsProgress: true,
+    progressViaFrames: true,
+    params: {},
+    movieUrl: (id) => `https://www.2embed.cc/embed/${id}`,
+    tvUrl: (id, season, ep) =>
+      `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${ep}`,
+  },
+  {
+    id: "vidsrccc",
+    label: "VidSrc CC",
+    tag: null,
+    note: null,
+    supportsProgress: true,
+    progressViaFrames: true,
+    params: {},
+    movieUrl: (id) => `https://vidsrc.cc/v2/embed/movie/${id}`,
+    tvUrl: (id, season, ep) =>
+      `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${ep}`,
+  },
+  {
+    id: "autoembed",
+    label: "AutoEmbed",
+    tag: null,
+    note: null,
+    supportsProgress: true,
+    idType: "imdb",
+    params: {},
+    movieUrl: (id) => `https://autoembed.me/movie/imdb/${id}`,
+    tvUrl: (id, season, ep) =>
+      `https://autoembed.me/tv/imdb/${id}/${season}/${ep}`,
+  },
+  {
     id: "vidsrc",
     label: "VidSrc",
     tag: null,
@@ -297,7 +355,7 @@ export const PLAYER_SOURCES = [
 ];
 
 // Sources that require a transparent webRequest intercept to load properly
-export const NEEDS_INTERCEPT = ["vidsrc", "devideosrc", "frembed", "kinohub"];
+export const NEEDS_INTERCEPT = ["vidsrc", "devideosrc", "frembed", "kinohub", "vidsrcsu", "twoembed", "vidsrccc"];
 
 export const getSourceUrl = (
   sourceId,

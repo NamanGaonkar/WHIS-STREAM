@@ -4463,3 +4463,50 @@ input:focus, select:focus {
     font-size: 14px !important;
     color: #ffffff !important;
 }
+
+.card-remove-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 12;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: rgba(18, 18, 18, 0.75);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+    transform: scale(0.85);
+    transition: opacity 0.2s ease, transform 0.2s ease, background 0.15s ease, border-color 0.15s ease;
+    padding: 0;
+}
+
+.card:hover .card-remove-btn {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.card-remove-btn:hover {
+    background: #e50914;
+    border-color: #ff3344;
+    color: #fff;
+    transform: scale(1.1);
+}
+
+.card-remove-btn:active {
+    transform: scale(0.95);
+}
+
+.context-menu-item--danger {
+    color: #ff4d4f !important;
+}
+
+.context-menu-item--danger:hover {
+    background: rgba(255, 77, 79, 0.15) !important;
+    color: #ff7875 !important;
+}

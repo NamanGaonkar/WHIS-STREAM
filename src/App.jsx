@@ -929,6 +929,42 @@ export default function App() {
     });
   }, []);
 
+  const handleRemoveProgress = useCallback(
+    (item) => {
+      if (!item) return;
+      const pk =
+        item._pk ||
+        (item.media_type === "movie"
+          ? `movie_${item.id}`
+          : `tv_${item.id}_s${item.season}e${item.episode}`);
+
+      setProgress((prev) => {
+        const next = { ...prev };
+        delete next[pk];
+        storage.set(STORAGE_KEYS.PROGRESS, next);
+        return next;
+      });
+
+      storage.remove("dlTime_" + pk);
+      storage.remove("skipIntro_" + pk);
+
+      setHistory((prev) => {
+        const next = prev.filter((h) => {
+          if (h.id !== item.id) return true;
+          if (item.media_type === "tv") {
+            return !(h.season === item.season && h.episode === item.episode);
+          }
+          return false;
+        });
+        storage.set(STORAGE_KEYS.HISTORY, next);
+        return next;
+      });
+
+      showToast(`Removed "${item.title || item.name || "Title"}" from Continue Watching`);
+    },
+    [showToast],
+  );
+
   // Memoized, avoids re-filtering on every download-progress event
   // Pre-compute progress keys for history items once; only re-runs when history changes.
   const historyWithKeys = useMemo(
@@ -1077,6 +1113,7 @@ export default function App() {
                 onMarkUnwatched={markUnwatched}
                 history={history}
                 apiKey={apiKey}
+                onRemoveProgress={handleRemoveProgress}
               />
             )}
             {page === "movie" && selected && (
@@ -1136,6 +1173,7 @@ export default function App() {
                 onMarkWatched={markWatched}
                 onMarkUnwatched={markUnwatched}
                 onRemoveHistory={removeHistory}
+                onRemoveProgress={handleRemoveProgress}
               />
             )}
             {page === "settings" && (

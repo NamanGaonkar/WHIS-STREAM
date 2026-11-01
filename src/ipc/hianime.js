@@ -392,11 +392,16 @@ function normalizeTitle(t) {
     .trim();
 }
 
-function anilistSeasonTitle(baseTitle, seasonNumber) {
+function getOrdinal(n) {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function fetchAniList(search) {
   return new Promise((resolve) => {
-    const resolveS1 = seasonNumber <= 1;
-    const query = `query($search:String){Media(search:$search,type:ANIME,sort:SEARCH_MATCH){title{english romaji}episodes relations{edges{relationType node{type format title{english romaji}episodes startDate{year}seasonYear}}}}}`;
-    const body = JSON.stringify({ query, variables: { search: baseTitle } });
+    const query = `query($search:String){Media(search:$search,type:ANIME,sort:SEARCH_MATCH){title{english romaji}episodes format relations{edges{relationType node{type format title{english romaji}episodes startDate{year}seasonYear}}}}}`;
+    const body = JSON.stringify({ query, variables: { search } });
     const opts = {
       hostname: "graphql.anilist.co",
       path: "/",
@@ -404,81 +409,593 @@ function anilistSeasonTitle(baseTitle, seasonNumber) {
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
+        "User-Agent": USER_AGENT,
         "Content-Length": Buffer.byteLength(body),
       },
     };
-
-    const fallback = {
-      title: baseTitle,
-      romaji: null,
-      episodes: null,
-      nextTitle: null,
-      nextRomaji: null,
-    };
-
     const req = https.request(opts, (res) => {
       let data = "";
       res.on("data", (c) => (data += c));
       res.on("end", () => {
         try {
           const json = JSON.parse(data);
-          const media = json?.data?.Media;
-          if (!media) return resolve(fallback);
-
-          const s1Romaji = media?.title?.romaji || null;
-          const s1Episodes = media?.episodes || null;
-          const sequels = (media.relations?.edges || [])
-            .filter(
-              (e) =>
-                e.relationType === "SEQUEL" &&
-                e.node.type === "ANIME" &&
-                (e.node.format === "TV" || e.node.format === "TV_SHORT"),
-            )
-            .sort((a, b) => {
-              const ya = a.node.startDate?.year || a.node.seasonYear || 9999;
-              const yb = b.node.startDate?.year || b.node.seasonYear || 9999;
-              return ya - yb;
-            });
-
-          const getTitle = (node) =>
-            node.title?.english || node.title?.romaji || null;
-          const getRomaji = (node) => node.title?.romaji || null;
-
-          if (resolveS1) {
-            const next = sequels[0]?.node ?? null;
-            return resolve({
-              title: media.title?.english || baseTitle,
-              romaji: s1Romaji,
-              episodes: s1Episodes,
-              nextTitle: next ? getTitle(next) : null,
-              nextRomaji: next ? getRomaji(next) : null,
-            });
-          }
-
-          const target = sequels[seasonNumber - 2];
-          if (!target) return resolve({ ...fallback, romaji: s1Romaji });
-
-          const nextNode = sequels[seasonNumber - 1]?.node ?? null;
-          resolve({
-            title: getTitle(target.node) || baseTitle,
-            romaji: getRomaji(target.node) || s1Romaji,
-            episodes: target.node.episodes || null,
-            nextTitle: nextNode ? getTitle(nextNode) : null,
-            nextRomaji: nextNode ? getRomaji(nextNode) : null,
-          });
+          resolve(json?.data?.Media || null);
         } catch {
-          resolve(fallback);
+          resolve(null);
         }
       });
     });
-    req.on("error", () => resolve(fallback));
+    req.on("error", () => resolve(null));
     req.setTimeout(8000, () => {
       req.destroy();
-      resolve(fallback);
+      resolve(null);
     });
     req.write(body);
     req.end();
   });
+}
+
+function scoreAnimeMatch(result, candidates, targetSeason) {
+  const normTitle = (result.title || "").toLowerCase();
+  const normJname = (result.jname || "").toLowerCase();
+  const normId = (result.id || "").toLowerCase();
+  const combined = `${normTitle} ${normJname} ${normId}`;
+
+  let score = 0;
+
+  for (const c of candidates) {
+    const nc = c.toLowerCase().trim();
+    if (normTitle === nc || normJname === nc) {
+      score += 100;
+      break;
+    }
+    if (combined.includes(nc)) {
+      score += 20;
+    }
+  }
+
+  const sNum = Number(targetSeason) || 1;
+  const ord = getOrdinal(sNum).toLowerCase();
+
+  if (sNum > 1) {
+    const targetPatterns = [
+      new RegExp(`season\\s*${sNum}\\b`, "i"),
+      new RegExp(`\\b${ord}\\s*season\\b`, "i"),
+      new RegExp(`\\b${sNum}(?:st|nd|rd|th)?\\s*season\\b`, "i"),
+      new RegExp(`-${sNum}(?:-[a-z0-9]+)?// ── IPC: HiAnime (hianime.at) episode resolver + local player server ──────────
+// Re-implementation of the scraping method used by ani-cli (v5.1.6):
+//   1. GET  /search?keyword=…                       → HTML, parse <h3 class="film-name">
+//   2. GET  /api/theme/episode/list/{numericId}      → episode list (data-id / data-number)
+//   3. GET  /api/theme/episode/servers?episodeId=…   → server list, pick "ZokoAnime"
+//   4. data-hash is base64(embed url); the embed page ships `window.__P="<blob>"`
+//   5. blob = base64(json XOR "otaku-embed-v1") → { src: "<master.m3u8>", subtitles: [...] }
+//   6. master playlist is fetched with the embed origin as Referer
+//
+// Requests go through Electron's `net.fetch` (Chromium network stack, so the TLS
+// fingerprint looks like a real browser, the equivalent of ani-cli's
+// curl-impersonate). If it is unavailable we fall back to Node's https module.
+
+const { app, ipcMain, net } = require("electron");
+const https = require("https");
+const http = require("http");
+const fs = require("fs");
+const dns = require("dns").promises;
+const netMod = require("net");
+const crypto = require("crypto");
+
+const BASE_URL = "https://hianime.at";
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+const OBFUSCATION_KEY = Buffer.from("otaku-embed-v1", "utf8");
+const SERVER_NAME = "ZokoAnime";
+const MAX_TEXT_BYTES = 5 * 1024 * 1024; // scraped pages / playlists are never larger
+
+// Keep-alive pools: HLS playback issues hundreds of small requests to one host.
+const httpsAgent = new https.Agent({ keepAlive: true, maxSockets: 16 });
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 16 });
+
+// ── SSRF guard ────────────────────────────────────────────────────────────────
+// URLs come from a third-party site (embed url, stream url, subtitles) and are
+// requested from the main process / the local proxy, so they must never point
+// at loopback or private networks.
+
+function isPrivateIp(ip) {
+  if (netMod.isIPv4(ip)) {
+    const [a, b] = ip.split(".").map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      a >= 224
+    );
+  }
+  if (netMod.isIPv6(ip)) {
+    const l = ip.toLowerCase();
+    const mapped = l.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isPrivateIp(mapped[1]);
+    return (
+      l === "::" ||
+      l === "::1" ||
+      l.startsWith("fc") ||
+      l.startsWith("fd") ||
+      /^fe[89ab]/.test(l)
+    );
+  }
+  return true;
+}
+
+async function assertPublicUrl(urlStr) {
+  let u;
+  try {
+    u = new URL(urlStr);
+  } catch {
+    throw new Error("Invalid url");
+  }
+  if (u.protocol !== "https:" && u.protocol !== "http:") {
+    throw new Error("Blocked protocol");
+  }
+  const host = u.hostname.replace(/^\[|\]$/g, "");
+  if (netMod.isIP(host)) {
+    if (isPrivateIp(host)) throw new Error("Blocked address");
+    return u;
+  }
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    throw new Error("Blocked address");
+  }
+  const addrs = await dns.lookup(host, { all: true });
+  if (!addrs.length || addrs.some((a) => isPrivateIp(a.address))) {
+    throw new Error("Blocked address");
+  }
+  return u;
+}
+
+// ── HTTP helpers ──────────────────────────────────────────────────────────────
+
+function nodeGet(urlStr, headers, timeoutMs, hops = 0) {
+  return new Promise((resolve, reject) => {
+    let u;
+    try {
+      u = new URL(urlStr);
+    } catch {
+      return reject(new Error("invalid url: " + urlStr));
+    }
+    const lib = u.protocol === "http:" ? http : https;
+    const req = lib.request(
+      {
+        hostname: u.hostname,
+        port: u.port || undefined,
+        path: u.pathname + u.search,
+        method: "GET",
+        headers: { "Accept-Encoding": "identity", ...headers },
+        agent: lib === https ? httpsAgent : httpAgent,
+      },
+      (res) => {
+        if (
+          res.statusCode >= 300 &&
+          res.statusCode < 400 &&
+          res.headers.location &&
+          hops < 8
+        ) {
+          res.resume();
+          const loc = new URL(res.headers.location, urlStr).href;
+          return assertPublicUrl(loc)
+            .then(() => resolve(nodeGet(loc, headers, timeoutMs, hops + 1)))
+            .catch(reject);
+        }
+        const chunks = [];
+        let size = 0;
+        res.on("data", (c) => {
+          size += c.length;
+          if (size > MAX_TEXT_BYTES) {
+            req.destroy(new Error("response too large"));
+            return;
+          }
+          chunks.push(c);
+        });
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            body: Buffer.concat(chunks).toString("utf8"),
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      reject(new Error("timeout"));
+    });
+    req.end();
+  });
+}
+
+// Fetches a URL as text. `referer` is optional. Returns { status, body }.
+async function hianimeGet(urlStr, { referer, accept } = {}) {
+  await assertPublicUrl(urlStr);
+  const headers = {
+    "User-Agent": USER_AGENT,
+    Accept: accept || "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+  };
+  if (referer) headers["Referer"] = referer;
+
+  if (net && typeof net.fetch === "function") {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 12000);
+    try {
+      const init = { headers, redirect: "follow", signal: ctrl.signal };
+      if (referer) {
+        init.referrer = referer;
+        init.referrerPolicy = "unsafe-url";
+      }
+      const res = await net.fetch(urlStr, init);
+      // the redirect target is only known afterwards → reject private hosts
+      if (res.url && res.url !== urlStr) await assertPublicUrl(res.url);
+      const len = parseInt(res.headers.get("content-length") || "0", 10);
+      if (len > MAX_TEXT_BYTES) throw new Error("response too large");
+      const body = await res.text();
+      if (body.length > MAX_TEXT_BYTES) throw new Error("response too large");
+      return { status: res.status, body };
+    } catch (e) {
+      if (e?.name === "AbortError") throw new Error("timeout");
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  return nodeGet(urlStr, headers, 12000);
+}
+
+// Same as hianimeGet, but throws on anything that is not 2xx and detects the
+// Cloudflare challenge page.
+async function hianimeCurl(urlStr, opts) {
+  const res = await hianimeGet(urlStr, opts);
+  if (/<title>\s*Just a moment/i.test(res.body)) {
+    throw new Error("Blocked by Cloudflare (HiAnime)");
+  }
+  if (res.status < 200 || res.status >= 300) {
+    throw new Error(`Request failed: HTTP ${res.status} from ${urlStr}`);
+  }
+  return res.body;
+}
+
+function decodeEntities(s) {
+  return String(s)
+    .replace(/&#0?39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
+}
+
+// The theme API wraps its HTML in JSON (escaped quotes/slashes). Return plain
+// HTML text no matter whether the payload is JSON or raw HTML.
+function unwrapApiHtml(body) {
+  let text = body;
+  try {
+    const json = JSON.parse(body);
+    const parts = [];
+    const walk = (v) => {
+      if (typeof v === "string") parts.push(v);
+      else if (Array.isArray(v)) v.forEach(walk);
+      else if (v && typeof v === "object") Object.values(v).forEach(walk);
+    };
+    walk(json);
+    if (parts.length) text = parts.join("\n");
+  } catch {
+    // not JSON → use the raw text
+  }
+  return text.replace(/\\"/g, '"').replace(/\\\//g, "/").replace(/\\/g, "");
+}
+
+function getAttr(tagText, name) {
+  const m = tagText.match(new RegExp(`${name}="([^"]*)"`));
+  return m ? m[1] : null;
+}
+
+// ── Embed config de-obfuscation ───────────────────────────────────────────────
+// base64(json XOR "otaku-embed-v1"), key repeated cyclically.
+
+function deobfuscateBlob(blob) {
+  const buf = Buffer.from(blob, "base64");
+  const out = Buffer.alloc(buf.length);
+  for (let i = 0; i < buf.length; i++) {
+    out[i] = buf[i] ^ OBFUSCATION_KEY[i % OBFUSCATION_KEY.length];
+  }
+  return out.toString("utf8");
+}
+
+// ── Scraping ──────────────────────────────────────────────────────────────────
+
+// Returns [{ id, title, jname }]
+async function hianimeSearch(query) {
+  const q = encodeURIComponent(query).replace(/%20/g, "+");
+  const html = await hianimeCurl(`${BASE_URL}/search?keyword=${q}`, {
+    accept: "text/html",
+  });
+  // the top-10 sidebar repeats the result markup → cut it off
+  const main = html.split('id="main-sidebar"')[0];
+  const results = [];
+  const re = /<h3 class="film-name">([\s\S]*?)<\/h3>/g;
+  let m;
+  while ((m = re.exec(main))) {
+    const anchor = m[1].match(/<a\s+([^>]*)>/);
+    if (!anchor) continue;
+    const href = getAttr(anchor[1], "href");
+    const title = getAttr(anchor[1], "title");
+    if (!href || !title) continue;
+    const id = href.split("?")[0].replace(/\/+$/, "").split("/").pop();
+    if (!id) continue;
+    const jname = getAttr(anchor[1], "data-jname");
+    results.push({
+      id,
+      title: decodeEntities(title),
+      jname: jname ? decodeEntities(jname) : null,
+    });
+  }
+  return results;
+}
+
+// Returns [{ epId, number }] for a show slug such as "one-piece-100"
+async function hianimeEpisodes(showId) {
+  const numericId = showId.slice(showId.lastIndexOf("-") + 1);
+  if (!/^\d+$/.test(numericId)) throw new Error("Invalid show id");
+  const body = await hianimeCurl(
+    `${BASE_URL}/api/theme/episode/list/${numericId}`,
+    { referer: BASE_URL + "/" },
+  );
+  const html = unwrapApiHtml(body);
+  const episodes = [];
+  for (const chunk of html.split("ep-item").slice(1)) {
+    const number = getAttr(chunk, "data-number");
+    const epId = getAttr(chunk, "data-id");
+    // ids from other providers have the same shape → check the slug in the link
+    if (!number || !epId || !/^\d+$/.test(epId)) continue;
+    if (!chunk.includes(`/watch/${showId}?ep=`)) continue;
+    episodes.push({ epId, number });
+  }
+  return episodes;
+}
+
+// Resolves a stream for one episode. Returns
+// { masterUrl, referer, malId, subtitle, resolution } or throws.
+async function hianimeStream(epId, mode) {
+  const body = await hianimeCurl(
+    `${BASE_URL}/api/theme/episode/servers?episodeId=${epId}`,
+    { referer: BASE_URL + "/" },
+  );
+  const html = unwrapApiHtml(body);
+
+  // only the ZokoAnime embed is understood by deobfuscateBlob
+  let hash = null;
+  for (const chunk of html.split("server-item").slice(1)) {
+    if (
+      getAttr(chunk, "data-type") === mode &&
+      getAttr(chunk, "data-server-name") === SERVER_NAME
+    ) {
+      hash = getAttr(chunk, "data-hash");
+      if (hash) break;
+    }
+  }
+  if (!hash) throw new Error(`No ${SERVER_NAME} server for ${mode}`);
+
+  const embedUrl = Buffer.from(hash, "base64").toString("utf8").trim();
+  if (!/^https?:\/\//i.test(embedUrl)) throw new Error("Invalid embed url");
+
+  // the stream host wants the embed site as referer; the embed url carries the MAL id
+  const referer = embedUrl.replace(/^(https?:\/\/[^/]*).*$/, "$1/");
+  const malMatch = embedUrl.match(/\/mal\/(\d+)\//);
+  const malId = malMatch ? parseInt(malMatch[1], 10) : null;
+
+  const embedHtml = await hianimeCurl(embedUrl);
+  const blobMatch = embedHtml.match(/window\.__P="([^"]*)"/);
+  if (!blobMatch) throw new Error("Embed config not found");
+
+  const jsonText = deobfuscateBlob(blobMatch[1]);
+  let masterUrl = null;
+  let subtitle = null;
+  try {
+    const cfg = JSON.parse(jsonText);
+    const findM3u8 = (v) => {
+      if (typeof v === "string") return /\.m3u8/i.test(v) ? v : null;
+      if (Array.isArray(v)) {
+        for (const x of v) {
+          const r = findM3u8(x);
+          if (r) return r;
+        }
+      } else if (v && typeof v === "object") {
+        if (typeof v.src === "string" && /\.m3u8/i.test(v.src)) return v.src;
+        for (const x of Object.values(v)) {
+          const r = findM3u8(x);
+          if (r) return r;
+        }
+      }
+      return null;
+    };
+    masterUrl = findM3u8(cfg);
+    const subs = Array.isArray(cfg.subtitles) ? cfg.subtitles : [];
+    const def = subs.find((s) => s && s.default) || null;
+    subtitle = def?.src || null;
+  } catch {
+    // JSON.parse failed → same regexes as ani-cli
+    const m = jsonText.match(/"src":"([^"]*\.m3u8[^"]*)"/);
+    masterUrl = m ? m[1] : null;
+    const sub = jsonText
+      .split(/\},\s*\{/)
+      .find((c) => /"default":true/.test(c) && /"src":"/.test(c));
+    subtitle = sub ? (sub.match(/"src":"([^"]*)"/) || [])[1] || null : null;
+  }
+  if (!masterUrl) throw new Error("No m3u8 source in embed config");
+  masterUrl = masterUrl.replace(/\\\//g, "/");
+  if (subtitle) subtitle = subtitle.replace(/\\\//g, "/");
+
+  // hls.js reads the master playlist itself and picks the levels
+  const resolution = "auto";
+
+  return { masterUrl, referer, malId, subtitle, resolution };
+}
+
+// ── AniList: resolve correct season title for S2+ ────────────────────────────
+
+function sanitizeTitle(t) {
+  return t
+    .replace(/[''`´]/g, "")
+    .replace(/[:!.]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeTitle(t) {
+  return String(t || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+, "i"),
+      new RegExp(`\\b${sNum}\\b`, "i"),
+    ];
+
+    for (const pat of targetPatterns) {
+      if (pat.test(combined)) {
+        score += 50;
+        break;
+      }
+    }
+
+    if (sNum >= 4 && /final\s*season/i.test(combined)) {
+      score += 40;
+    }
+
+    for (let other = 1; other <= 10; other++) {
+      if (other === sNum) continue;
+      const otherOrd = getOrdinal(other).toLowerCase();
+      if (
+        new RegExp(`season\\s*${other}\\b`, "i").test(combined) ||
+        new RegExp(`\\b${otherOrd}\\s*season\\b`, "i").test(combined)
+      ) {
+        score -= 70;
+      }
+    }
+  } else {
+    for (let other = 2; other <= 10; other++) {
+      const otherOrd = getOrdinal(other).toLowerCase();
+      if (
+        new RegExp(`season\\s*${other}\\b`, "i").test(combined) ||
+        new RegExp(`\\b${otherOrd}\\s*season\\b`, "i").test(combined) ||
+        /final\s*season/i.test(combined)
+      ) {
+        score -= 70;
+      }
+    }
+  }
+
+  return score;
+}
+
+async function anilistSeasonTitle(baseTitle, seasonNumber) {
+  const fallback = {
+    title: baseTitle,
+    romaji: null,
+    episodes: null,
+    nextTitle: null,
+    nextRomaji: null,
+  };
+
+  const getTitle = (node) =>
+    node?.title?.english || node?.title?.romaji || null;
+  const getRomaji = (node) => node?.title?.romaji || null;
+
+  if (seasonNumber <= 1) {
+    const media = await fetchAniList(baseTitle);
+    if (!media) return fallback;
+    const sequels = (media.relations?.edges || [])
+      .filter(
+        (e) =>
+          e.relationType === "SEQUEL" &&
+          e.node.type === "ANIME" &&
+          (e.node.format === "TV" || e.node.format === "TV_SHORT"),
+      )
+      .sort((a, b) => {
+        const ya = a.node.startDate?.year || a.node.seasonYear || 9999;
+        const yb = b.node.startDate?.year || b.node.seasonYear || 9999;
+        return ya - yb;
+      });
+    const next = sequels[0]?.node ?? null;
+    return {
+      title: media.title?.english || baseTitle,
+      romaji: media.title?.romaji || null,
+      episodes: media.episodes || null,
+      nextTitle: next ? getTitle(next) : null,
+      nextRomaji: next ? getRomaji(next) : null,
+    };
+  }
+
+  // Multi-season: seasonNumber > 1
+  const ord = getOrdinal(seasonNumber);
+  const queries = [
+    `${baseTitle} Season ${seasonNumber}`,
+    `${baseTitle} ${ord} Season`,
+    `${baseTitle} ${seasonNumber}`,
+  ];
+
+  for (const q of queries) {
+    const media = await fetchAniList(q);
+    if (
+      media &&
+      (media.format === "TV" ||
+        media.format === "TV_SHORT" ||
+        media.format === "ONA")
+    ) {
+      const title = getTitle(media);
+      if (title) {
+        return {
+          title,
+          romaji: getRomaji(media),
+          episodes: media.episodes || null,
+          nextTitle: null,
+          nextRomaji: null,
+        };
+      }
+    }
+  }
+
+  // Fallback: check baseTitle's sequels chain
+  const baseMedia = await fetchAniList(baseTitle);
+  if (baseMedia) {
+    const sequels = (baseMedia.relations?.edges || [])
+      .filter(
+        (e) =>
+          e.relationType === "SEQUEL" &&
+          e.node.type === "ANIME" &&
+          (e.node.format === "TV" || e.node.format === "TV_SHORT"),
+      )
+      .sort((a, b) => {
+        const ya = a.node.startDate?.year || a.node.seasonYear || 9999;
+        const yb = b.node.startDate?.year || b.node.seasonYear || 9999;
+        return ya - yb;
+      });
+    const target = sequels[seasonNumber - 2];
+    if (target) {
+      const nextNode = sequels[seasonNumber - 1]?.node ?? null;
+      return {
+        title: getTitle(target.node) || `${baseTitle} Season ${seasonNumber}`,
+        romaji: getRomaji(target.node) || baseMedia.title?.romaji || null,
+        episodes: target.node.episodes || null,
+        nextTitle: nextNode ? getTitle(nextNode) : null,
+        nextRomaji: nextNode ? getRomaji(nextNode) : null,
+      };
+    }
+  }
+
+  return {
+    ...fallback,
+    title: `${baseTitle} Season ${seasonNumber}`,
+  };
 }
 
 // ── Show cache (episode lists rarely change within a session) ────────────────
@@ -806,7 +1323,7 @@ const _showCache = new Map(); // normalized candidates -> { ts, show }
 // Finds the HiAnime show for the given title candidates. Prefers an exact
 // (normalized) title match over the first search hit. Candidates that normalize
 // to the same string are searched only once; results are cached.
-async function findShow(candidates) {
+async function findShow(candidates, targetSeason = 1) {
   const seen = new Set();
   const unique = candidates.filter((c) => {
     const n = normalizeTitle(c);
@@ -814,12 +1331,14 @@ async function findShow(candidates) {
     seen.add(n);
     return true;
   });
-  const cacheKey = [...seen].join("|");
+  const cacheKey = `${targetSeason}|${[...seen].join("|")}`;
   const hit = _showCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < SHOW_LOOKUP_TTL) return hit.show;
 
+  let allResults = [];
   let fallback = null;
-  let found = null;
+  let exact = null;
+
   for (const candidate of unique) {
     let results;
     try {
@@ -829,18 +1348,25 @@ async function findShow(candidates) {
       continue;
     }
     if (!results.length) continue;
-    const exact = results.find(
-      (r) =>
-        seen.has(normalizeTitle(r.title)) ||
-        (r.jname && seen.has(normalizeTitle(r.jname))),
-    );
-    if (exact) {
-      found = exact;
-      break;
-    }
     if (!fallback) fallback = results[0];
+
+    for (const r of results) {
+      if (
+        !exact &&
+        (seen.has(normalizeTitle(r.title)) ||
+          (r.jname && seen.has(normalizeTitle(r.jname))))
+      ) {
+        exact = r;
+      }
+      r._score = scoreAnimeMatch(r, unique, targetSeason);
+      allResults.push(r);
+    }
   }
-  const show = found || fallback;
+
+  allResults.sort((a, b) => (b._score || 0) - (a._score || 0));
+  const bestScored = allResults.find((r) => r._score > 0);
+  const show = bestScored || exact || fallback;
+
   if (show) {
     if (_showCache.size > 200)
       _showCache.delete(_showCache.keys().next().value);
@@ -923,13 +1449,30 @@ function register() {
         searchTitle = anilistResult.nextTitle;
       }
 
-      // 2. Build search candidate list
+      // 2. Build search candidate list with season awareness
+      const ord = getOrdinal(season);
       const candidates = [
         ...new Set([
           searchTitle,
           sanitizeTitle(searchTitle),
+          ...(season > 1
+            ? [
+                `${title} Season ${season}`,
+                `${title} ${ord} Season`,
+                `${title} ${season}`,
+                sanitizeTitle(`${title} Season ${season}`),
+              ]
+            : []),
           ...(anilistResult.romaji && searchTitle === anilistResult.title
-            ? [anilistResult.romaji]
+            ? [
+                anilistResult.romaji,
+                ...(season > 1
+                  ? [
+                      `${anilistResult.romaji} ${season}`,
+                      `${anilistResult.romaji} Season ${season}`,
+                    ]
+                  : []),
+              ]
             : []),
           ...(anilistResult.nextRomaji &&
           searchTitle === anilistResult.nextTitle
@@ -940,8 +1483,8 @@ function register() {
         ]),
       ].filter(Boolean);
 
-      // 3. Search HiAnime (cached per title)
-      const show = await findShow(candidates);
+      // 3. Search HiAnime (cached per title & season)
+      const show = await findShow(candidates, season);
       if (!show) return { ok: false, error: "No results for: " + searchTitle };
 
       // 4. Episode list → episode id
@@ -951,9 +1494,13 @@ function register() {
         return { ok: false, error: "No episodes found for: " + show.title };
       }
       const wantedNumber = isMovie ? "1" : String(adjustedEpisodeNumber);
+      const cleanWanted = wantedNumber.replace(/^0+/, "") || "0";
       const episode =
-        episodes.find((e) => e.number === wantedNumber) ||
+        episodes.find((e) => String(e.number).trim() === wantedNumber) ||
         episodes.find((e) => parseFloat(e.number) === Number(wantedNumber)) ||
+        episodes.find(
+          (e) => String(e.number).trim().replace(/^0+/, "") === cleanWanted,
+        ) ||
         (isMovie ? episodes[0] : null);
       if (!episode) {
         return { ok: false, error: "Episode " + wantedNumber + " not found" };

@@ -18,6 +18,7 @@ const MediaCard = memo(function MediaCard({
   onMarkUnwatched,
   ageRating,
   restricted,
+  onRemove,
 }) {
   const title = item.title || item.name;
   const year = (item.release_date || item.first_air_date || "").slice(0, 4);
@@ -45,15 +46,16 @@ const MediaCard = memo(function MediaCard({
 
   // For TV series cards without a specific episode, watched marking is disabled
   const canMarkWatched = !isTV || (item.season != null && item.episode != null);
+  const canOpenMenu = canMarkWatched || Boolean(onRemove);
 
   const openMenu = useCallback(
     (e) => {
-      if (!canMarkWatched) return; // no context menu for whole series
+      if (!canOpenMenu) return; // no context menu if neither watched nor remove is available
       e.preventDefault();
       e.stopPropagation();
       setMenu({ x: e.clientX, y: e.clientY });
     },
-    [canMarkWatched],
+    [canOpenMenu],
   );
 
   useEffect(() => {
@@ -113,6 +115,25 @@ const MediaCard = memo(function MediaCard({
             </div>
           )}
 
+          {onRemove && (
+            <button
+              type="button"
+              className="card-remove-btn"
+              title="Remove from Continue Watching"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onRemove();
+              }}
+              aria-label="Remove from Continue Watching"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          )}
+
           <div className="card-overlay">
             {isUnreleased ? (
               <div className="card-unreleased-overlay">
@@ -162,13 +183,27 @@ const MediaCard = memo(function MediaCard({
           style={{ top: menu.y, left: menu.x }}
           onClick={(e) => e.stopPropagation()}
         >
-          {isWatched ? (
-            <button className="context-menu-item" onClick={handleMarkUnwatched}>
-              ↩ Mark as Unwatched
-            </button>
-          ) : (
-            <button className="context-menu-item" onClick={handleMarkWatched}>
-              ✓ Mark as Watched
+          {canMarkWatched && (
+            isWatched ? (
+              <button className="context-menu-item" onClick={handleMarkUnwatched}>
+                ↩ Mark as Unwatched
+              </button>
+            ) : (
+              <button className="context-menu-item" onClick={handleMarkWatched}>
+                ✓ Mark as Watched
+              </button>
+            )
+          )}
+          {onRemove && (
+            <button
+              className="context-menu-item context-menu-item--danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemove();
+                setMenu(null);
+              }}
+            >
+              ✕ Remove from Continue Watching
             </button>
           )}
         </div>

@@ -26,7 +26,7 @@ function getRecentHistoryItems(history, count = 5) {
 }
 
 // ── Netflix-style Horizontal Row with Slide Controls ─────────────────────────
-function NetflixRow({ title, items, onSelect, ratingsMap, watched, onMarkWatched, onMarkUnwatched, progress = {} }) {
+function NetflixRow({ title, items, onSelect, ratingsMap, watched, onMarkWatched, onMarkUnwatched, progress = {}, onRemoveItem }) {
   const rowRef = useRef(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -100,6 +100,7 @@ function NetflixRow({ title, items, onSelect, ratingsMap, watched, onMarkWatched
                   onMarkUnwatched={onMarkUnwatched}
                   ageRating={rd.cert}
                   restricted={rd.restricted}
+                  onRemove={onRemoveItem ? () => onRemoveItem(item) : undefined}
                 />
               </div>
             );
@@ -134,6 +135,7 @@ export default function HomePage({
   onMarkUnwatched,
   history,
   apiKey,
+  onRemoveProgress,
 }) {
   const [heroIndex, setHeroIndex] = useState(0);
   const heroCandidates = useMemo(() => trending.slice(0, 5), [trending]);
@@ -346,6 +348,7 @@ export default function HomePage({
                 onMarkWatched={onMarkWatched}
                 onMarkUnwatched={onMarkUnwatched}
                 progress={progress}
+                onRemoveItem={onRemoveProgress}
               />
             );
           }
