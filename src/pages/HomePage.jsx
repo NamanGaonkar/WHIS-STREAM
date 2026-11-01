@@ -193,11 +193,7 @@ export default function HomePage({
     const controller = new AbortController();
     Promise.allSettled(
       recent.map((item) =>
-        tmdbFetch(
-          `/${item.media_type || "movie"}/${item.id}/recommendations`,
-          {},
-          controller.signal,
-        ),
+        tmdbFetch(`/${item.media_type || "movie"}/${item.id}/recommendations`, apiKey),
       ),
     )
       .then((results) => {
@@ -231,8 +227,8 @@ export default function HomePage({
     if (!apiKey || offline) return;
     const controller = new AbortController();
     Promise.all([
-      tmdbFetch("/movie/top_rated", {}, controller.signal),
-      tmdbFetch("/tv/top_rated", {}, controller.signal),
+      tmdbFetch("/movie/top_rated", apiKey),
+      tmdbFetch("/tv/top_rated", apiKey),
     ])
       .then(([movieData, tvData]) => {
         const movies = (movieData.results || []).slice(0, 15).map((i) => ({ ...i, media_type: "movie" }));
