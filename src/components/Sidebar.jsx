@@ -105,7 +105,7 @@ export default function Sidebar({
       <div
         className="sidebar-logo"
         onClick={() => onNavigate("home")}
-        title="Streambert"
+        title="WHIS STREAM"
         style={{ position: "relative" }}
       >
         <StreambertLogo />

@@ -121,7 +121,7 @@ export default function SetupScreen({ onSave, onSkip }) {
         <div className="apikey-logo">
           <StreambertLogo />
         </div>
-        <div className="apikey-title">STREAMBERT</div>
+        <div className="apikey-title">WHIS STREAM</div>
         <p className="apikey-sub">
           Enter your <strong>free</strong> TMDB{" "}
           <strong>Read Access Token</strong> to get started.
@@ -138,7 +138,7 @@ export default function SetupScreen({ onSave, onSkip }) {
           <br />
           <ExternalLink
             className="apikey-link"
-            href="https://github.com/truelockmc/streambert/blob/main/tmdb-tutorial.md"
+            href="https://github.com/NamanGaonkar/WHIS-STREAM/blob/main/tmdb-tutorial.md"
           >
             Step-by-step guide on how to get that Token
           </ExternalLink>

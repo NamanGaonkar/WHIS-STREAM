@@ -4102,3 +4102,326 @@ input:focus, select:focus {
     background: rgba(11, 7, 22, 0.6) !important;
     border-bottom: 1px solid rgba(168, 85, 247, 0.12) !important;
 }
+
+
+/* ── NETFLIX HOMEPAGE & GLASSY PURPLE AESTHETIC ──────────────────────── */
+
+.netflix-home {
+    padding-bottom: 60px;
+}
+
+.netflix-hero {
+    position: relative;
+    height: 72vh;
+    min-height: 520px;
+    max-height: 800px;
+    margin-bottom: -60px;
+    display: flex;
+    align-items: flex-end;
+    overflow: hidden;
+}
+
+.netflix-hero-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center 20%;
+    filter: brightness(0.92);
+    transition: background-image 0.8s ease-in-out;
+}
+
+.netflix-hero-vignette {
+    position: absolute;
+    inset: 0;
+    background: 
+        linear-gradient(77deg, rgba(11, 7, 22, 0.95) 0%, rgba(11, 7, 22, 0.7) 40%, transparent 85%),
+        linear-gradient(to top, var(--bg, #0b0716) 0%, rgba(11, 7, 22, 0.7) 20%, transparent 60%);
+    pointer-events: none;
+}
+
+.netflix-hero-content {
+    position: relative;
+    z-index: 10;
+    padding: 0 54px 90px;
+    max-width: 680px;
+}
+
+.netflix-hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    border-radius: 999px;
+    background: rgba(168, 85, 247, 0.22);
+    border: 1px solid rgba(192, 132, 252, 0.4);
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.35);
+    margin-bottom: 14px;
+}
+
+.netflix-hero-badge span {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2.5px;
+    color: var(--purple-light, #d8b4fe);
+    text-transform: uppercase;
+}
+
+.netflix-hero-title {
+    font-size: clamp(38px, 5.5vw, 68px);
+    font-weight: 900;
+    font-family: var(--font-body);
+    line-height: 1.08;
+    letter-spacing: -0.5px;
+    color: #ffffff;
+    margin-bottom: 14px;
+    text-shadow: 0 4px 24px rgba(0, 0, 0, 0.8), 0 0 30px rgba(168, 85, 247, 0.3);
+}
+
+.netflix-hero-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 14px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.netflix-match-score {
+    color: #46d369;
+    font-weight: 700;
+}
+
+.netflix-year {
+    color: #e5e5e5;
+}
+
+.netflix-badge-hd,
+.netflix-badge-rating {
+    font-size: 11px;
+    padding: 2px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 4px;
+    color: #ffffff;
+    background: rgba(0, 0, 0, 0.35);
+    backdrop-filter: blur(8px);
+}
+
+.netflix-hero-overview {
+    font-size: 15px;
+    line-height: 1.55;
+    color: #d1d5db;
+    margin-bottom: 22px;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
+}
+
+.netflix-hero-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.netflix-btn-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 30px;
+    background: #ffffff;
+    color: #000000;
+    font-weight: 700;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.netflix-btn-play:hover {
+    background: rgba(255, 255, 255, 0.85);
+    transform: scale(1.04);
+    box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
+}
+
+.netflix-btn-info {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 26px;
+    background: rgba(109, 109, 110, 0.6);
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 16px;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    backdrop-filter: blur(14px);
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.netflix-btn-info:hover {
+    background: rgba(109, 109, 110, 0.4);
+    transform: scale(1.04);
+}
+
+/* ── Netflix Horizontal Rows with Smooth Sliders ────────────────────────── */
+
+.netflix-rows-section {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    gap: 34px;
+    padding: 0 0 40px 0;
+}
+
+.netflix-row-container {
+    position: relative;
+    padding: 0 54px;
+}
+
+.netflix-row-header {
+    margin-bottom: 12px;
+}
+
+.netflix-row-title {
+    font-size: 21px;
+    font-weight: 700;
+    color: #f3f4f6;
+    letter-spacing: 0.3px;
+    transition: color 0.2s ease;
+}
+
+.netflix-row-container:hover .netflix-row-title {
+    color: var(--purple-light, #d8b4fe);
+}
+
+.netflix-row-wrapper {
+    position: relative;
+}
+
+.netflix-row-track {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scroll-behavior: smooth;
+    padding: 10px 4px 20px 4px;
+    scrollbar-width: none;
+}
+
+.netflix-row-track::-webkit-scrollbar {
+    display: none;
+}
+
+.netflix-card-slot {
+    flex: 0 0 180px;
+    max-width: 180px;
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+}
+
+.netflix-card-slot:hover {
+    transform: scale(1.08) translateY(-6px);
+    z-index: 50;
+}
+
+.netflix-slider-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 44px;
+    height: calc(100% - 30px);
+    background: rgba(14, 9, 24, 0.75);
+    border: none;
+    color: #ffffff;
+    cursor: pointer;
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(16px);
+    transition: background-color 0.2s, opacity 0.2s;
+    opacity: 0;
+    border-radius: 6px;
+}
+
+.netflix-row-wrapper:hover .netflix-slider-btn {
+    opacity: 1;
+}
+
+.netflix-slider-btn:hover {
+    background: rgba(168, 85, 247, 0.7);
+    color: #ffffff;
+}
+
+.netflix-slider-btn svg {
+    width: 28px;
+    height: 28px;
+}
+
+.netflix-slider-left {
+    left: -44px;
+}
+
+.netflix-slider-right {
+    right: -44px;
+}
+
+.netflix-offline {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+    gap: 16px;
+    color: var(--text2);
+}
+
+/* ── Apikey Modal Glass Overhaul ── */
+.apikey-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(8, 5, 16, 0.78) !important;
+    backdrop-filter: blur(28px) saturate(190%) !important;
+    -webkit-backdrop-filter: blur(28px) saturate(190%) !important;
+}
+
+.apikey-box {
+    width: 90% !important;
+    max-width: 500px !important;
+    padding: 38px 34px !important;
+    border-radius: 24px !important;
+    background: rgba(24, 15, 42, 0.8) !important;
+    backdrop-filter: blur(32px) saturate(200%) !important;
+    -webkit-backdrop-filter: blur(32px) saturate(200%) !important;
+    border: 1px solid rgba(192, 132, 252, 0.32) !important;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7), 0 0 45px rgba(168, 85, 247, 0.28) !important;
+    text-align: center;
+}
+
+.apikey-title {
+    font-size: 32px !important;
+    font-weight: 900 !important;
+    letter-spacing: 2px !important;
+    color: var(--purple-light, #d8b4fe) !important;
+    text-shadow: 0 0 24px rgba(168, 85, 247, 0.5) !important;
+    margin-bottom: 8px !important;
+}
+
+.apikey-input {
+    border-radius: 12px !important;
+    background: rgba(14, 9, 26, 0.8) !important;
+    border: 1.5px solid rgba(168, 85, 247, 0.3) !important;
+    padding: 14px 18px !important;
+    font-size: 14px !important;
+    color: #ffffff !important;
+}
