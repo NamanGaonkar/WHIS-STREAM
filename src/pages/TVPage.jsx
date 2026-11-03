@@ -1784,7 +1784,7 @@ export default function TVPage({
     : false;
 
   return (
-    <div className="netflix-detail-view fade-in">
+    <div className="detail-view fade-in">
       {loading && (
         <div className="loader">
           <div className="spinner" />
@@ -2248,138 +2248,146 @@ export default function TVPage({
         </div>
       )}
 
-      {/* ── Netflix Detail Hero ── */}
+      {/* ── Detail Hero Banner ── */}
       {!loading && (
         <>
           <div
-            className="netflix-hero"
+            className="detail-hero-banner"
             style={{
               backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
             }}
           >
-            <div className="netflix-hero-vignette" />
-            <div className="netflix-hero-content">
-              <div className="netflix-brand-badge">
-                <span className="netflix-n-logo">N</span>
-                <span className="netflix-type-label">SERIES</span>
-              </div>
-
-              <h1 className="netflix-hero-title">{title}</h1>
-
-              <div className="netflix-meta-row">
-                <span className="netflix-match">
-                  {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
-                </span>
-                {year && <span className="netflix-year">{year}</span>}
-                {rating.cert && (
-                  <span className="netflix-badge-rating">{rating.cert}</span>
-                )}
-                {displaySeasonCount > 0 && (
-                  <span className="netflix-year">
-                    {displaySeasonCount} Season{displaySeasonCount !== 1 ? "s" : ""}
-                  </span>
-                )}
-                {displayEpisodeCount > 0 && (
-                  <span className="netflix-year" style={{ color: "#8c8c8c" }}>
-                    ({displayEpisodeCount} Episodes)
-                  </span>
-                )}
-                <span className="netflix-badge-tech">HD</span>
-                <span className="netflix-badge-tech">5.1</span>
-              </div>
-
-              <div className="netflix-hero-actions">
-                <button
-                  className="netflix-btn-play"
-                  onClick={() => {
-                    const ep = selectedEp || currentSeasonEpisodes?.[0] || { episode_number: 1, name: "Episode 1" };
-                    playEpisode(ep);
+            <div className="detail-hero-gradient" />
+            <div className="detail-hero-content">
+              {/* Media Poster */}
+              <div className="detail-hero-poster">
+                <img
+                  src={imgUrl(d.poster_path, "w500")}
+                  alt={title}
+                  onError={(e) => {
+                    e.target.style.display = "none";
                   }}
-                >
-                  <PlayIcon />
-                  <span>
-                    {selectedEp && progress[`tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`] > 0
-                      ? "Resume"
-                      : "Play"}
+                />
+              </div>
+
+              {/* Media Main Info */}
+              <div className="detail-hero-info">
+                <h1 className="detail-hero-title">{title}</h1>
+
+                <div className="detail-meta-row">
+                  <span className="detail-match">
+                    {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
                   </span>
-                </button>
+                  {year && <span className="detail-year">{year}</span>}
+                  {rating.cert && (
+                    <span className="detail-badge-rating">{rating.cert}</span>
+                  )}
+                  {displaySeasonCount > 0 && (
+                    <span className="detail-year">
+                      {displaySeasonCount} Season{displaySeasonCount !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {displayEpisodeCount > 0 && (
+                    <span className="detail-year" style={{ color: "#8c8c8c" }}>
+                      ({displayEpisodeCount} Episodes)
+                    </span>
+                  )}
+                  <span className="detail-badge-tech">HD</span>
+                  <span className="detail-badge-tech">5.1</span>
+                </div>
 
-                <button
-                  className="netflix-btn-circle"
-                  onClick={onSave}
-                  title={isSaved ? "Saved to List" : "Add to List"}
-                >
-                  {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-                </button>
-
-                {trailerKey && !restricted && (
+                <div className="detail-hero-actions">
                   <button
-                    className="netflix-btn-circle"
-                    onClick={() => setShowTrailer(true)}
-                    title="Watch Trailer"
+                    className="detail-btn-play"
+                    onClick={() => {
+                      const ep = selectedEp || currentSeasonEpisodes?.[0] || { episode_number: 1, name: "Episode 1" };
+                      playEpisode(ep);
+                    }}
                   >
-                    <TrailerIcon />
+                    <PlayIcon />
+                    <span>
+                      {selectedEp && progress[`tv_${item.id}_s${selectedSeason}e${selectedEp.episode_number}`] > 0
+                        ? "Resume"
+                        : "Play"}
+                    </span>
                   </button>
+
+                  <button
+                    className="detail-btn-circle"
+                    onClick={onSave}
+                    title={isSaved ? "Saved to List" : "Add to List"}
+                  >
+                    {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
+                  </button>
+
+                  {trailerKey && !restricted && (
+                    <button
+                      className="detail-btn-circle"
+                      onClick={() => setShowTrailer(true)}
+                      title="Watch Trailer"
+                    >
+                      <TrailerIcon />
+                    </button>
+                  )}
+
+                  <button
+                    className="detail-btn-circle"
+                    onClick={() => setShowCast(true)}
+                    title="View Cast & Crew"
+                  >
+                    <CastIcon />
+                  </button>
+
+                  <button className="detail-btn-back" onClick={onBack}>
+                    <BackIcon /> Back
+                  </button>
+                </div>
+
+                {/* Overview / Synopsis */}
+                {displayOverview && (
+                  <p className="detail-hero-overview">{displayOverview}</p>
                 )}
 
-                <button
-                  className="netflix-btn-circle"
-                  onClick={() => setShowCast(true)}
-                  title="View Cast & Crew"
-                >
-                  <CastIcon />
-                </button>
+                {/* Meta Tags */}
+                <div className="detail-hero-tags">
+                  {credits?.cast?.length > 0 && (
+                    <div className="detail-tag-item">
+                      <span className="detail-tag-label">Cast:</span>
+                      <span className="detail-tag-value">
+                        {credits.cast.slice(0, 5).map((c) => c.name).join(", ")}
+                      </span>
+                    </div>
+                  )}
 
-                <button className="netflix-btn-back" onClick={onBack}>
-                  <BackIcon /> Back
-                </button>
+                  {displayGenres.length > 0 && (
+                    <div className="detail-tag-item">
+                      <span className="detail-tag-label">Genres:</span>
+                      <span className="detail-tag-value">
+                        {displayGenres.map((g) => g.name).join(", ")}
+                      </span>
+                    </div>
+                  )}
+
+                  {status && (
+                    <div className="detail-tag-item">
+                      <span className="detail-tag-label">Status:</span>
+                      <span className="detail-tag-value">{status}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
 
-          {/* ── Netflix 2-Column Overview & Meta ── */}
-          <div className="netflix-body-container">
-            <div className="netflix-info-grid">
-              <div>
-                <p className="netflix-synopsis">{displayOverview}</p>
-              </div>
-
-              <div className="netflix-sidebar">
-                {credits?.cast?.length > 0 && (
-                  <div className="netflix-meta-block">
-                    <span className="netflix-meta-label">Cast:</span>
-                    <span className="netflix-meta-value">
-                      {credits.cast.slice(0, 4).map((c) => c.name).join(", ")}
-                    </span>
-                  </div>
-                )}
-
-                {displayGenres.length > 0 && (
-                  <div className="netflix-meta-block">
-                    <span className="netflix-meta-label">Genres:</span>
-                    <span className="netflix-meta-value">
-                      {displayGenres.map((g) => g.name).join(", ")}
-                    </span>
-                  </div>
-                )}
-
-                {status && (
-                  <div className="netflix-meta-block">
-                    <span className="netflix-meta-label">Status:</span>
-                    <span className="netflix-meta-value">{status}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* ── Netflix Episodes Section ── */}
-            <div className="netflix-episodes-section">
-              <div className="netflix-episodes-header">
-                <span className="netflix-episodes-heading">Episodes</span>
+          {/* ── TV Episodes Section ── */}
+          <div className="detail-body-container">
+            <div className="detail-episodes-section">
+              <div className="detail-episodes-header">
+                <span className="detail-episodes-heading">Episodes</span>
 
                 {seasons.length > 0 && (
                   <select
-                    className="netflix-season-select"
+                    className="detail-season-select"
                     value={selectedSeason}
                     onChange={(e) => setSelectedSeason(Number(e.target.value))}
                   >
@@ -2400,7 +2408,7 @@ export default function TVPage({
 
               {!loadingSeason &&
                 (seasonData?.episodes || episodeGroupCurrentEpisodes?.length) && (
-                  <div className="netflix-ep-list">
+                  <div className="detail-ep-list">
                     {currentSeasonEpisodes.map((ep) => {
                       const pk = `tv_${item.id}_s${selectedSeason}e${ep.episode_number}`;
                       const epPct = progress[pk] || 0;
@@ -2410,7 +2418,7 @@ export default function TVPage({
                       return (
                         <div
                           key={ep.episode_number}
-                          className={`netflix-ep-row ${isPlayingEp ? "active" : ""}`}
+                          className={`detail-ep-row ${isPlayingEp ? "active" : ""}`}
                           onClick={() => playEpisode(ep)}
                           onContextMenu={(e) => {
                             e.preventDefault();
@@ -2418,9 +2426,9 @@ export default function TVPage({
                             setEpMenu({ x: e.clientX, y: e.clientY, pk });
                           }}
                         >
-                          <div className="netflix-ep-num">{ep.episode_number}</div>
+                          <div className="detail-ep-num">{ep.episode_number}</div>
 
-                          <div className="netflix-ep-thumb-wrap">
+                          <div className="detail-ep-thumb-wrap">
                             {ep.still_path ? (
                               <img
                                 src={imgUrl(ep.still_path, "w300")}
@@ -2442,30 +2450,30 @@ export default function TVPage({
                               </div>
                             )}
 
-                            <div className="netflix-ep-hover-play">
+                            <div className="detail-ep-hover-play">
                               <PlayIcon />
                             </div>
 
                             {epPct > 0 && (
-                              <div className="netflix-ep-prog-bar">
+                              <div className="detail-ep-prog-bar">
                                 <div
-                                  className="netflix-ep-prog-fill"
+                                  className="detail-ep-prog-fill"
                                   style={{ width: `${Math.min(epPct, 100)}%` }}
                                 />
                               </div>
                             )}
                           </div>
 
-                          <div className="netflix-ep-info">
-                            <div className="netflix-ep-title-bar">
-                              <span className="netflix-ep-name">
+                          <div className="detail-ep-info">
+                            <div className="detail-ep-title-bar">
+                              <span className="detail-ep-name">
                                 {ep.name || `Episode ${ep.episode_number}`}
                               </span>
-                              <span className="netflix-ep-duration">
+                              <span className="detail-ep-duration">
                                 {ep.runtime ? `${ep.runtime}m` : ""}
                               </span>
                             </div>
-                            <p className="netflix-ep-synopsis">
+                            <p className="detail-ep-synopsis">
                               {ep.overview || "No description available."}
                             </p>
                           </div>

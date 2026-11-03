@@ -834,7 +834,7 @@ export default function MoviePage({
   );
 
   return (
-    <div className="netflix-detail-view fade-in">
+    <div className="detail-view fade-in">
       {/* ── Dedicated Netflix Fullscreen Player View ── */}
       {playing && !restricted && !isUnreleased && (
         <div
@@ -1141,120 +1141,127 @@ export default function MoviePage({
         </div>
       )}
 
-      {/* ── Netflix Detail Hero ── */}
+      {/* ── Detail Hero Banner ── */}
       <div
-        className="netflix-hero"
+        className="detail-hero-banner"
         style={{
           backgroundImage: `url(${imgUrl(d.backdrop_path, "w1280")})`,
         }}
       >
-        <div className="netflix-hero-vignette" />
-        <div className="netflix-hero-content">
-          <div className="netflix-brand-badge">
-            <span className="netflix-n-logo">N</span>
-            <span className="netflix-type-label">FILM</span>
+        <div className="detail-hero-gradient" />
+        <div className="detail-hero-content">
+          {/* Media Poster */}
+          <div className="detail-hero-poster">
+            <img
+              src={imgUrl(d.poster_path, "w500")}
+              alt={title}
+              onError={(e) => {
+                e.target.style.display = "none";
+              }}
+            />
           </div>
 
-          <h1 className="netflix-hero-title">{title}</h1>
+          {/* Media Main Info */}
+          <div className="detail-hero-info">
+            <h1 className="detail-hero-title">{title}</h1>
 
-          <div className="netflix-meta-row">
-            <span className="netflix-match">
-              {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
-            </span>
-            {year && <span className="netflix-year">{year}</span>}
-            {rating.cert && (
-              <span className="netflix-badge-rating">{rating.cert}</span>
-            )}
-            {d.runtime && (
-              <span className="netflix-year">
-                {Math.floor(d.runtime / 60)}h {d.runtime % 60}m
+            <div className="detail-meta-row">
+              <span className="detail-match">
+                {displayScore ? Math.round(Number(displayScore) * 10) : 98}% Match
               </span>
-            )}
-            <span className="netflix-badge-tech">HD</span>
-            <span className="netflix-badge-tech">5.1</span>
-          </div>
+              {year && <span className="detail-year">{year}</span>}
+              {rating.cert && (
+                <span className="detail-badge-rating">{rating.cert}</span>
+              )}
+              {d.runtime && (
+                <span className="detail-year">
+                  {Math.floor(d.runtime / 60)}h {d.runtime % 60}m
+                </span>
+              )}
+              <span className="detail-badge-tech">HD</span>
+              <span className="detail-badge-tech">5.1</span>
+            </div>
 
-          <div className="netflix-hero-actions">
-            {isUnreleased ? (
+            <div className="detail-hero-actions">
+              {isUnreleased ? (
+                <button
+                  className="detail-btn-play"
+                  disabled
+                  style={{ opacity: 0.6, cursor: "not-allowed" }}
+                  title="This movie has not been released yet"
+                >
+                  🔒 Unreleased
+                </button>
+              ) : restricted ? (
+                <button
+                  className="detail-btn-play"
+                  disabled
+                  style={{ opacity: 0.6, cursor: "not-allowed" }}
+                  title="Inappropriate for your age rating setting"
+                >
+                  🔒 Restricted
+                </button>
+              ) : (
+                <button className="detail-btn-play" onClick={handlePlay}>
+                  <PlayIcon />
+                  <span>{hasProgress ? "Resume" : "Play"}</span>
+                </button>
+              )}
+
               <button
-                className="netflix-btn-play"
-                disabled
-                style={{ opacity: 0.6, cursor: "not-allowed" }}
-                title="This movie has not been released yet"
+                className="detail-btn-circle"
+                onClick={onSave}
+                title={isSaved ? "Saved to List" : "Add to List"}
               >
-                🔒 Unreleased
+                {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
               </button>
-            ) : restricted ? (
+
+              {trailerKey && !restricted && (
+                <button
+                  className="detail-btn-circle"
+                  onClick={() => setShowTrailer(true)}
+                  title="Watch Trailer"
+                >
+                  <TrailerIcon />
+                </button>
+              )}
+
               <button
-                className="netflix-btn-play"
-                disabled
-                style={{ opacity: 0.6, cursor: "not-allowed" }}
-                title="Inappropriate for your age rating setting"
+                className="detail-btn-circle"
+                onClick={() => setShowCast(true)}
+                title="View Cast & Crew"
               >
-                🔒 Restricted
+                <CastIcon />
               </button>
-            ) : (
-              <button className="netflix-btn-play" onClick={handlePlay}>
-                <PlayIcon />
-                <span>{hasProgress ? "Resume" : "Play"}</span>
+
+              {!isUnreleased && (
+                <button
+                  className="detail-btn-circle"
+                  onClick={
+                    isWatched
+                      ? () => onMarkUnwatched?.(progressKey)
+                      : () => onMarkWatched?.(progressKey)
+                  }
+                  title={isWatched ? "Mark Unwatched" : "Mark Watched"}
+                  style={isWatched ? { color: "#46d369", borderColor: "#46d369" } : undefined}
+                >
+                  <WatchedIcon size={18} />
+                </button>
+              )}
+
+              <button className="detail-btn-back" onClick={onBack}>
+                <BackIcon /> Back
               </button>
+            </div>
+
+            {/* Overview / Synopsis */}
+            {displayOverview && (
+              <p className="detail-hero-overview">{displayOverview}</p>
             )}
 
-            <button
-              className="netflix-btn-circle"
-              onClick={onSave}
-              title={isSaved ? "Saved to List" : "Add to List"}
-            >
-              {isSaved ? <BookmarkFillIcon /> : <BookmarkIcon />}
-            </button>
-
-            {trailerKey && !restricted && (
-              <button
-                className="netflix-btn-circle"
-                onClick={() => setShowTrailer(true)}
-                title="Watch Trailer"
-              >
-                <TrailerIcon />
-              </button>
-            )}
-
-            <button
-              className="netflix-btn-circle"
-              onClick={() => setShowCast(true)}
-              title="View Cast & Crew"
-            >
-              <CastIcon />
-            </button>
-
-            {!isUnreleased && (
-              <button
-                className="netflix-btn-circle"
-                onClick={
-                  isWatched
-                    ? () => onMarkUnwatched?.(progressKey)
-                    : () => onMarkWatched?.(progressKey)
-                }
-                title={isWatched ? "Mark Unwatched" : "Mark Watched"}
-                style={isWatched ? { color: "#46d369", borderColor: "#46d369" } : undefined}
-              >
-                <WatchedIcon size={18} />
-              </button>
-            )}
-
-            <button className="netflix-btn-back" onClick={onBack}>
-              <BackIcon /> Back
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Netflix 2-Column Overview & Meta ── */}
-      <div className="netflix-body-container">
-        <div className="netflix-info-grid">
-          <div>
-            <p className="netflix-synopsis">{displayOverview}</p>
+            {/* Progress Bar (if in-progress) */}
             {!isWatched && displayPct > 0 && (
-              <div className="progress-bar-row" style={{ maxWidth: 500 }}>
+              <div className="progress-bar-row" style={{ maxWidth: 480, marginBottom: 14 }}>
                 <div className="progress-bar-outer">
                   <div
                     className="progress-bar-fill"
@@ -1264,65 +1271,68 @@ export default function MoviePage({
                 <span style={{ fontSize: 12, color: "#8c8c8c" }}>{progressLabel}</span>
               </div>
             )}
-          </div>
 
-          <div className="netflix-sidebar">
-            {credits?.cast?.length > 0 && (
-              <div className="netflix-meta-block">
-                <span className="netflix-meta-label">Cast:</span>
-                <span className="netflix-meta-value">
-                  {credits.cast.slice(0, 4).map((c) => c.name).join(", ")}
-                </span>
-              </div>
-            )}
+            {/* Meta Tags */}
+            <div className="detail-hero-tags">
+              {credits?.cast?.length > 0 && (
+                <div className="detail-tag-item">
+                  <span className="detail-tag-label">Cast:</span>
+                  <span className="detail-tag-value">
+                    {credits.cast.slice(0, 5).map((c) => c.name).join(", ")}
+                  </span>
+                </div>
+              )}
 
-            {displayGenres.length > 0 && (
-              <div className="netflix-meta-block">
-                <span className="netflix-meta-label">Genres:</span>
-                <span className="netflix-meta-value">
-                  {displayGenres.map((g) => g.name).join(", ")}
-                </span>
-              </div>
-            )}
+              {displayGenres.length > 0 && (
+                <div className="detail-tag-item">
+                  <span className="detail-tag-label">Genres:</span>
+                  <span className="detail-tag-value">
+                    {displayGenres.map((g) => g.name).join(", ")}
+                  </span>
+                </div>
+              )}
 
-            {d.tagline && (
-              <div className="netflix-meta-block">
-                <span className="netflix-meta-label">This movie is:</span>
-                <span className="netflix-meta-value">{d.tagline}</span>
-              </div>
-            )}
+              {d.tagline && (
+                <div className="detail-tag-item">
+                  <span className="detail-tag-label">Tagline:</span>
+                  <span className="detail-tag-value">{d.tagline}</span>
+                </div>
+              )}
 
-            {d.original_language && (
-              <div className="netflix-meta-block">
-                <span className="netflix-meta-label">Original Language:</span>
-                <span className="netflix-meta-value">{d.original_language.toUpperCase()}</span>
-              </div>
-            )}
+              {d.original_language && (
+                <div className="detail-tag-item">
+                  <span className="detail-tag-label">Language:</span>
+                  <span className="detail-tag-value">{d.original_language.toUpperCase()}</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
       {collection && onSelect && (
-        <div className="section">
-          <div className="section-title">{collection.name}</div>
-          <div className="scroll-row">
-            {collection.parts.map((part) => {
-              const pk = `movie_${part.id}`;
-              const isCurrent = part.id === item.id;
-              return (
-                <CollectionCard
-                  key={part.id}
-                  part={part}
-                  pk={pk}
-                  isCurrent={isCurrent}
-                  onSelect={onSelect}
-                  progress={progress[pk] || 0}
-                  watched={watched}
-                  onMarkWatched={onMarkWatched}
-                  onMarkUnwatched={onMarkUnwatched}
-                />
-              );
-            })}
+        <div className="detail-body-container">
+          <div className="section" style={{ padding: 0 }}>
+            <div className="section-title">{collection.name}</div>
+            <div className="scroll-row">
+              {collection.parts.map((part) => {
+                const pk = `movie_${part.id}`;
+                const isCurrent = part.id === item.id;
+                return (
+                  <CollectionCard
+                    key={part.id}
+                    part={part}
+                    pk={pk}
+                    isCurrent={isCurrent}
+                    onSelect={onSelect}
+                    progress={progress[pk] || 0}
+                    watched={watched}
+                    onMarkWatched={onMarkWatched}
+                    onMarkUnwatched={onMarkUnwatched}
+                  />
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
