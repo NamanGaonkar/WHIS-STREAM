@@ -703,13 +703,21 @@ function buildPlayerHtml(videoUrl, startTime, subtitleUrl, nonce) {
   const startTime=${start};
   const isMp4=/\.mp4(\?|$)/i.test(rawUrl);
 
-  function startPlayback(){
-    if(startTime>0){
-      video.currentTime=startTime;
+  let hasSeeked=false;
+  function applyStartTime(){
+    if(!hasSeeked && startTime>0 && video.duration && !isNaN(video.duration)){
+      hasSeeked=true;
+      try {
+        video.currentTime=Math.min(startTime, Math.max(0, video.duration - 1));
+      } catch(e){}
     }
+  }
+
+  function startPlayback(){
     const p=video.play();
     if(p&&typeof p.catch==='function'){
-      p.catch(function(){
+      p.catch(function(err){
+        console.warn('Autoplay failed, trying muted autoplay:', err);
         video.muted=true;
         video.play().then(function(){
           function unmute(){
@@ -719,21 +727,26 @@ function buildPlayerHtml(videoUrl, startTime, subtitleUrl, nonce) {
           }
           window.addEventListener('click',unmute);
           window.addEventListener('keydown',unmute);
-        }).catch(function(){});
+        }).catch(function(e){
+          console.error('Muted playback failed:', e);
+        });
       });
     }
   }
 
+  video.addEventListener('loadedmetadata',function(){
+    applyStartTime();
+    startPlayback();
+  });
+  video.addEventListener('canplay',applyStartTime);
+
   if(isMp4){
     video.src=src;
-    video.addEventListener('loadedmetadata',function(){
-      startPlayback();
-    },{once:true});
     startPlayback();
   }else if(window.Hls&&Hls.isSupported()){
     const hls=new Hls({
       enableWorker:true,
-      lowLatencyMode:true,
+      lowLatencyMode:false,
       backBufferLength:90
     });
     hls.loadSource(src);
@@ -758,7 +771,6 @@ function buildPlayerHtml(videoUrl, startTime, subtitleUrl, nonce) {
     });
   }else if(video.canPlayType('application/vnd.apple.mpegurl')){
     video.src=src;
-    if(startTime>0)video.addEventListener('loadedmetadata',function(){video.currentTime=startTime;},{once:true});
     startPlayback();
   }
 </script>
@@ -775,7 +787,13 @@ async function proxyRequest(target, req, res, hops = 0) {
     return;
   }
   const lib = targetUrl.protocol === "https:" ? https : http;
-  const isJustAnime = targetUrl.hostname.includes("justanime.to");
+  const isJustAnime =
+    targetUrl.hostname.includes("justanime.to") ||
+    (_currentVideoReferer && _currentVideoReferer.includes("justanime.to")) ||
+    targetUrl.hostname.includes("rundowncdn.top") ||
+    targetUrl.hostname.includes("nexabloom.top") ||
+    targetUrl.hostname.includes("vidguard") ||
+    targetUrl.hostname.includes("swishrv");
   const headers = {
     "User-Agent": USER_AGENT,
     Referer: isJustAnime ? "https://justanime.to/" : (_currentVideoReferer || BASE_URL + "/"),

@@ -180,6 +180,13 @@ export default function MoviePage({
     [item.id, details],
   );
 
+  const availableSources = useMemo(() => {
+    return PLAYER_SOURCES.filter((s) => {
+      if (!isAnime && s.tag === "ANIME") return false;
+      return true;
+    });
+  }, [isAnime]);
+
   // Direct (non-async) player URL. Anime-capable sources (Vidnest) use their
   // anime route (AniList id + episode 1 + sub/dub) when AniList data exists;
   // otherwise the regular TMDB movie route is used.
@@ -967,7 +974,7 @@ export default function MoviePage({
               style={{ top: menuPos.top, left: menuPos.left, zIndex: 100000 }}
               onClick={(e) => e.stopPropagation()}
             >
-              {PLAYER_SOURCES.map((src) => (
+              {availableSources.map((src) => (
                 <button
                   key={src.id}
                   className={

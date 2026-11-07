@@ -32,6 +32,9 @@ if (process.env.STREAMBERT_LOW_RAM === "1") {
   console.log("STREAMBERT_LOW_RAM mode off");
 }
 
+// Allow media to autoplay immediately without requiring repeated user interaction
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
+
 // -- Startup benchmark ---------------------------------------------------------
 const _t0 = Date.now();
 const _bench = (label) =>

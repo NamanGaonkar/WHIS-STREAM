@@ -534,6 +534,14 @@ export default function TVPage({
     [item.id, details],
   );
 
+  const availableSources = useMemo(() => {
+    return PLAYER_SOURCES.filter((s) => {
+      if (sourceIsMovieOnly(s.id)) return false;
+      if (!isAnime && s.tag === "ANIME") return false;
+      return true;
+    });
+  }, [isAnime]);
+
   const [downloaderFolder, setDownloaderFolder] = useState(
     () => storage.get("downloaderFolder") || "",
   );

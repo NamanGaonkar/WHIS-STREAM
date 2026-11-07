@@ -153,7 +153,7 @@ async function fetchServerStream(targetId, episodeNumber, server, mode) {
       ? streamObj.subtitles
       : [];
     const referer =
-      streamObj.headers?.Referer || "https://flixcloud.cc/";
+      streamObj.headers?.Referer || "https://justanime.to/";
 
     return {
       ok: true,
